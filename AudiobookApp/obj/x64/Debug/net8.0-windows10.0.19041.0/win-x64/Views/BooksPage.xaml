@@ -4,46 +4,158 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid>
+    <Page.Resources>
+        <DataTemplate x:Key="BookListTemplate">
+            <Grid Padding="10">
+                <Grid.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem x:ConnectionId='5' Text="Remove"
+                                                                />
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
 
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+                <Grid ColumnDefinitions="56,*"
+                      ColumnSpacing="14"
+                      MinHeight="64">
+                    <Border Width="48"
+                            Height="48"
+                            CornerRadius="4"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <Grid>
+                            <FontIcon Glyph="&#xE8D6;"
+                                      FontSize="20"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            <Image Source="{Binding CoverImage}"
+                                   Stretch="UniformToFill"/>
+                        </Grid>
+                    </Border>
 
-        <Button x:ConnectionId='2' x:Name="ImportButton"
-            Content="Import Audiobook"
-            Margin="10"
-                                      />
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="16"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Author}"
+                                   Opacity="0.7"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </DataTemplate>
 
-        <ListView x:ConnectionId='3' x:Name="BooksList"
-              Grid.Row="1">
+        <DataTemplate x:Key="BookIconTemplate">
+            <Grid Width="168"
+                  Padding="8">
+                <Grid.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem x:ConnectionId='3' Text="Remove"
+                                                                />
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
 
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid Padding="8">
+                <StackPanel Spacing="8">
+                    <Border Width="140"
+                            Height="140"
+                            CornerRadius="8"
+                            HorizontalAlignment="Center"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <Grid>
+                            <FontIcon Glyph="&#xE8D6;"
+                                      FontSize="38"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            <Image Source="{Binding CoverImage}"
+                                   Stretch="UniformToFill"/>
+                        </Grid>
+                    </Border>
 
-                        <Grid.ContextFlyout>
-                            <MenuFlyout>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Title}"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center"
+                                   TextWrapping="WrapWholeWords"
+                                   MaxLines="1"/>
+                        <TextBlock Text="{Binding Author}"
+                                   Opacity="0.7"
+                                   TextAlignment="Center"
+                                   TextWrapping="WrapWholeWords"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
 
-                                <MenuFlyoutItem x:ConnectionId='5' Text="Remove"
-                                                            />
+    <Grid Padding="16"
+          RowDefinitions="Auto,*"
+          RowSpacing="12">
 
-                            </MenuFlyout>
-                        </Grid.ContextFlyout>
+        <Grid ColumnDefinitions="Auto,*"
+              ColumnSpacing="12">
+            <Button x:ConnectionId='8' x:Name="ImportButton"
+                                              >
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                    <SymbolIcon Symbol="Add"/>
+                    <TextBlock Text="Import Audiobook" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
 
-                        <StackPanel>
-                            <TextBlock Text="{Binding Title}" FontSize="16"/>
-                            <TextBlock Text="{Binding Author}" Opacity="0.7"/>
-                        </StackPanel>
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        HorizontalAlignment="Right">
+                <ToggleButton x:ConnectionId='9' x:Name="ListViewButton"
+                                                          
+                              IsChecked="True">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <FontIcon Glyph="&#xE8FD;"
+                                  FontSize="14"/>
+                        <TextBlock Text="List"/>
+                    </StackPanel>
+                </ToggleButton>
 
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
+                <ToggleButton x:ConnectionId='10' x:Name="IconViewButton"
+                                                          >
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <FontIcon Glyph="&#xE8A9;"
+                                  FontSize="14"/>
+                        <TextBlock Text="Large icons"/>
+                    </StackPanel>
+                </ToggleButton>
+            </StackPanel>
+        </Grid>
 
-        </ListView>
+        <Grid Grid.Row="1">
+            <ListView x:ConnectionId='6' x:Name="BooksList"
+                      ItemTemplate="{StaticResource BookListTemplate}"
+                      IsItemClickEnabled="True"
+                                                     />
 
+            <GridView x:ConnectionId='7' x:Name="BooksGrid"
+                      ItemTemplate="{StaticResource BookIconTemplate}"
+                      Visibility="Collapsed"
+                      SelectionMode="Single"
+                      IsItemClickEnabled="True"
+                                                     >
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid Orientation="Horizontal"
+                                       MaximumRowsOrColumns="0"/>
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+            </GridView>
+        </Grid>
     </Grid>
-
 </Page>
 

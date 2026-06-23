@@ -226,7 +226,7 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
         
         private void InitTypeTables()
         {
-            _typeNameTable = new string[36];
+            _typeNameTable = new string[37];
             _typeNameTable[0] = "Microsoft.UI.Xaml.Controls.XamlControlsResources";
             _typeNameTable[1] = "Microsoft.UI.Xaml.ResourceDictionary";
             _typeNameTable[2] = "Object";
@@ -260,11 +260,12 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
             _typeNameTable[30] = "Microsoft.UI.Xaml.Controls.UserControl";
             _typeNameTable[31] = "AudiobookApp.Views.ImportBookDialog";
             _typeNameTable[32] = "AudiobookApp.Models.Book";
-            _typeNameTable[33] = "Microsoft.UI.Xaml.Controls.TreeViewNode";
-            _typeNameTable[34] = "System.Collections.Generic.IList`1<Microsoft.UI.Xaml.Controls.TreeViewNode>";
-            _typeNameTable[35] = "Int32";
+            _typeNameTable[33] = "AudiobookApp.Views.PlayerPage";
+            _typeNameTable[34] = "Microsoft.UI.Xaml.Controls.TreeViewNode";
+            _typeNameTable[35] = "System.Collections.Generic.IList`1<Microsoft.UI.Xaml.Controls.TreeViewNode>";
+            _typeNameTable[36] = "Int32";
 
-            _typeTable = new global::System.Type[36];
+            _typeTable = new global::System.Type[37];
             _typeTable[0] = typeof(global::Microsoft.UI.Xaml.Controls.XamlControlsResources);
             _typeTable[1] = typeof(global::Microsoft.UI.Xaml.ResourceDictionary);
             _typeTable[2] = typeof(global::System.Object);
@@ -298,9 +299,10 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
             _typeTable[30] = typeof(global::Microsoft.UI.Xaml.Controls.UserControl);
             _typeTable[31] = typeof(global::AudiobookApp.Views.ImportBookDialog);
             _typeTable[32] = typeof(global::AudiobookApp.Models.Book);
-            _typeTable[33] = typeof(global::Microsoft.UI.Xaml.Controls.TreeViewNode);
-            _typeTable[34] = typeof(global::System.Collections.Generic.IList<global::Microsoft.UI.Xaml.Controls.TreeViewNode>);
-            _typeTable[35] = typeof(global::System.Int32);
+            _typeTable[33] = typeof(global::AudiobookApp.Views.PlayerPage);
+            _typeTable[34] = typeof(global::Microsoft.UI.Xaml.Controls.TreeViewNode);
+            _typeTable[35] = typeof(global::System.Collections.Generic.IList<global::Microsoft.UI.Xaml.Controls.TreeViewNode>);
+            _typeTable[36] = typeof(global::System.Int32);
         }
 
         private int LookupTypeIndexByName(string typeName)
@@ -342,7 +344,7 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
         private object Activate_27_MainViewModel() { return new global::AudiobookApp.ViewModels.MainViewModel(); }
         private object Activate_28_BooksPage() { return new global::AudiobookApp.Views.BooksPage(); }
         private object Activate_32_Book() { return new global::AudiobookApp.Models.Book(); }
-        private object Activate_33_TreeViewNode() { return new global::Microsoft.UI.Xaml.Controls.TreeViewNode(); }
+        private object Activate_34_TreeViewNode() { return new global::Microsoft.UI.Xaml.Controls.TreeViewNode(); }
         private void StaticInitializer_0_XamlControlsResources() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::Microsoft.UI.Xaml.Controls.XamlControlsResources).TypeHandle);
         private void StaticInitializer_4_NavigationView() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::Microsoft.UI.Xaml.Controls.NavigationView).TypeHandle);
         private void StaticInitializer_6_NavigationViewPaneDisplayMode() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode).TypeHandle);
@@ -360,8 +362,9 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
         private void StaticInitializer_28_BooksPage() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::AudiobookApp.Views.BooksPage).TypeHandle);
         private void StaticInitializer_31_ImportBookDialog() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::AudiobookApp.Views.ImportBookDialog).TypeHandle);
         private void StaticInitializer_32_Book() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::AudiobookApp.Models.Book).TypeHandle);
-        private void StaticInitializer_33_TreeViewNode() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::Microsoft.UI.Xaml.Controls.TreeViewNode).TypeHandle);
-        private void StaticInitializer_34_IList() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::System.Collections.Generic.IList<global::Microsoft.UI.Xaml.Controls.TreeViewNode>).TypeHandle);
+        private void StaticInitializer_33_PlayerPage() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::AudiobookApp.Views.PlayerPage).TypeHandle);
+        private void StaticInitializer_34_TreeViewNode() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::Microsoft.UI.Xaml.Controls.TreeViewNode).TypeHandle);
+        private void StaticInitializer_35_IList() => global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(global::System.Collections.Generic.IList<global::Microsoft.UI.Xaml.Controls.TreeViewNode>).TypeHandle);
         private void MapAdd_0_XamlControlsResources(object instance, object key, object item)
         {
             var collection = (global::System.Collections.Generic.IDictionary<global::System.Object, global::System.Object>)instance;
@@ -375,7 +378,7 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
             var newItem = (global::System.Object)item;
             collection.Add(newItem);
         }
-        private void VectorAdd_34_IList(object instance, object item)
+        private void VectorAdd_35_IList(object instance, object item)
         {
             var collection = (global::System.Collections.Generic.ICollection<global::Microsoft.UI.Xaml.Controls.TreeViewNode>)instance;
             var newItem = (global::Microsoft.UI.Xaml.Controls.TreeViewNode)item;
@@ -631,10 +634,17 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
                 xamlType = userType;
                 break;
 
-            case 33:   //  Microsoft.UI.Xaml.Controls.TreeViewNode
+            case 33:   //  AudiobookApp.Views.PlayerPage
+                userType = new global::AudiobookApp.AudiobookApp_XamlTypeInfo.XamlUserType(this, typeName, type, GetXamlTypeByName("Microsoft.UI.Xaml.Controls.Page"));
+                userType.StaticInitializer = StaticInitializer_33_PlayerPage;
+                userType.SetIsLocalType();
+                xamlType = userType;
+                break;
+
+            case 34:   //  Microsoft.UI.Xaml.Controls.TreeViewNode
                 userType = new global::AudiobookApp.AudiobookApp_XamlTypeInfo.XamlUserType(this, typeName, type, GetXamlTypeByName("Microsoft.UI.Xaml.DependencyObject"));
-                userType.Activator = Activate_33_TreeViewNode;
-                userType.StaticInitializer = StaticInitializer_33_TreeViewNode;
+                userType.Activator = Activate_34_TreeViewNode;
+                userType.StaticInitializer = StaticInitializer_34_TreeViewNode;
                 userType.AddMemberName("Children");
                 userType.AddMemberName("Content");
                 userType.AddMemberName("Depth");
@@ -646,15 +656,15 @@ namespace AudiobookApp.AudiobookApp_XamlTypeInfo
                 xamlType = userType;
                 break;
 
-            case 34:   //  System.Collections.Generic.IList`1<Microsoft.UI.Xaml.Controls.TreeViewNode>
+            case 35:   //  System.Collections.Generic.IList`1<Microsoft.UI.Xaml.Controls.TreeViewNode>
                 userType = new global::AudiobookApp.AudiobookApp_XamlTypeInfo.XamlUserType(this, typeName, type, null);
-                userType.StaticInitializer = StaticInitializer_34_IList;
-                userType.CollectionAdd = VectorAdd_34_IList;
+                userType.StaticInitializer = StaticInitializer_35_IList;
+                userType.CollectionAdd = VectorAdd_35_IList;
                 userType.SetIsReturnTypeStub();
                 xamlType = userType;
                 break;
 
-            case 35:   //  Int32
+            case 36:   //  Int32
                 xamlType = new global::AudiobookApp.AudiobookApp_XamlTypeInfo.XamlSystemBaseType(typeName, type);
                 break;
             }

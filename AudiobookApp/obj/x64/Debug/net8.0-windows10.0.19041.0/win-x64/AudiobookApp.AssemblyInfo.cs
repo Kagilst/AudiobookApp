@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AudiobookApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c8fed25b644a863d4b934dbd7e97fa86afb25264")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fd510fc2f6d1e8696ca67b19dae9480a9f4bb382")]
 [assembly: System.Reflection.AssemblyProductAttribute("AudiobookApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AudiobookApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

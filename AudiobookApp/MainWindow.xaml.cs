@@ -54,6 +54,8 @@ namespace AudiobookApp
                 RefreshCurrentView();
             };
 
+            _booksPage.BookSelected += OpenBook;
+
             LoadList();
             BuildSidebar();
 
@@ -218,6 +220,13 @@ namespace AudiobookApp
 
             var dialog = new ImportBookDialog(book, VM.Categories);
 
+            dialog.CancelRequested += () =>
+            {
+                _selectedSidebarItem = null;
+                CategoryList.SelectedItem = null;
+                RefreshBooksView();
+            };
+
             dialog.ImportConfirmed += (b) =>
             {
                 if (VM.Books.Any(x => x.FilePath == b.FilePath))
@@ -358,6 +367,14 @@ namespace AudiobookApp
             {
                 VM.Books.Add(book);
             }
+        }
+
+        //--------- Player --------
+        private void OpenBook(Book book)
+        {
+            var playerPage = new PlayerPage(book);
+
+            ContentFrame.Content = playerPage;
         }
     }
 }

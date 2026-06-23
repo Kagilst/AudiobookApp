@@ -15,6 +15,7 @@ namespace AudiobookApp.Views
         public Book Book { get; set; }
 
         public event Action<Book>? ImportConfirmed;
+        public event Action? CancelRequested;
 
         public ImportBookDialog(Book book, IEnumerable<LibraryCategory> categories)
         {
@@ -83,6 +84,11 @@ namespace AudiobookApp.Views
             }
 
             ImportConfirmed?.Invoke(book);
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            CancelRequested?.Invoke();
         }
 
         private sealed class CategoryOption

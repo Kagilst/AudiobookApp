@@ -31,9 +31,9 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1">
                     <Grid>
-                        <Image x:ConnectionId='6' x:Name="CoverImage"
+                        <Image x:ConnectionId='7' x:Name="CoverImage"
                                Stretch="UniformToFill"/>
-                        <FontIcon x:ConnectionId='7' x:Name="CoverPlaceholder"
+                        <FontIcon x:ConnectionId='8' x:Name="CoverPlaceholder"
                                   Glyph="&#xE8D6;"
                                   FontSize="48"
                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -61,12 +61,17 @@
                             HorizontalAlignment="Center">
                     <TextBlock Text="Category"
                                FontWeight="SemiBold"/>
-                    <ComboBox x:ConnectionId='5' x:Name="CategoryCombo"
+                    <ComboBox x:ConnectionId='6' x:Name="CategoryCombo"
                               HorizontalAlignment="Stretch"/>
                 </StackPanel>
 
                 <Button x:ConnectionId='4' Content="Import"
                         Style="{StaticResource AccentButtonStyle}"
+                                            
+                        HorizontalAlignment="Stretch"
+                        MinWidth="280"/>
+
+                <Button x:ConnectionId='5' Content="Cancel"
                                             
                         HorizontalAlignment="Stretch"
                         MinWidth="280"/>

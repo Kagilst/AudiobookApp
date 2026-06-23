@@ -71,6 +71,11 @@
                         HorizontalAlignment="Stretch"
                         MinWidth="280"/>
 
+                <Button Content="Cancel"
+                        Click="Cancel_Click"
+                        HorizontalAlignment="Stretch"
+                        MinWidth="280"/>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>

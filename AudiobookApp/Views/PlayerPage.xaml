@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="AudiobookApp.Views.PlayerPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AudiobookApp.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <StackPanel
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center"
+        Spacing="10">
+
+        <Border Width="180"
+        Height="180"
+        CornerRadius="8"
+        HorizontalAlignment="Center"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1">
+            <Grid>
+                <Image x:Name="CoverImage"
+               Stretch="UniformToFill"/>
+                <FontIcon x:Name="CoverPlaceholder"
+                  Glyph="&#xE8D6;"
+                  FontSize="48"
+                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <TextBlock
+            x:Name="TitleText"
+            FontSize="18"
+            FontWeight="SemiBold"
+            TextAlignment="Center"
+            TextWrapping="WrapWholeWords"
+            HorizontalAlignment="Center"/>
+
+        <TextBlock
+            x:Name="AuthorText"
+            FontSize="14"
+            Opacity="0.7"
+            TextAlignment="Center"
+            TextWrapping="WrapWholeWords"
+            HorizontalAlignment="Center"/>
+
+        <StackPanel
+            Orientation="Horizontal"
+            HorizontalAlignment="Center"
+            Spacing="20">
+
+            <Button x:Name="PreviousButton">
+                <SymbolIcon Symbol="Previous"/>
+            </Button>
+
+            <Button
+                x:Name="PlayPauseButton"
+                Width="64"
+                Height="64"
+                Click="PlayPauseButton_Click">
+
+                <SymbolIcon
+                x:Name="PlayPauseIcon"
+                Symbol="Play"/>
+            </Button>
+
+            <Button x:Name="NextButton">
+                <SymbolIcon Symbol="Next"/>
+            </Button>
+
+        </StackPanel>
+
+        <MediaPlayerElement
+            x:Name="AudioPlayer"
+            AreTransportControlsEnabled="False"
+            AutoPlay="False"
+            Visibility="Collapsed"/>
+
+    </StackPanel>
+</Page>
