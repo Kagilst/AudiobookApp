@@ -51,7 +51,7 @@ namespace AudiobookApp
             {
                 VM.Books.Remove(book);
                 SaveBooks();
-                RefreshBooksView();
+                RefreshCurrentView();
             };
 
             LoadList();
@@ -106,6 +106,11 @@ namespace AudiobookApp
             ContentFrame.Content = _booksPage;
         }
 
+        private void RefreshCurrentView()
+        {
+            RefreshBooksView(_selectedSidebarItem?.Category?.Name);
+        }
+
         private void NavigateTo(SidebarItem item)
         {
             _selectedSidebarItem = item;
@@ -123,6 +128,7 @@ namespace AudiobookApp
 
         private void AllBooks_Click(object sender, RoutedEventArgs e)
         {
+            _selectedSidebarItem = null;
             CategoryList.SelectedItem = null;
             RefreshBooksView();
         }
@@ -230,7 +236,7 @@ namespace AudiobookApp
                 VM.Books.Add(b);
                 SaveBooks();
 
-                NavigateTo(_selectedSidebarItem);
+                RefreshCurrentView();
             };
 
             ContentFrame.Content = dialog;
@@ -258,10 +264,19 @@ namespace AudiobookApp
 
             if (result == ContentDialogResult.Primary)
             {
-                item.Category.Name = input.Text;
+                var oldName = item.Category.Name;
+                item.Category.Name = input.Text.Trim();
+
+                foreach (var book in VM.Books.Where(b =>
+                    string.Equals(b.CategoryName, oldName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    book.CategoryName = item.Category.Name;
+                }
 
                 SaveCategories();
+                SaveBooks();
                 BuildSidebar();
+                RefreshCurrentView();
             }
         }
 

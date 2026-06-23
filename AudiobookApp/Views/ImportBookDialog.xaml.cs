@@ -1,18 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml.Media.Imaging;
 using AudiobookApp.Models;
+using Windows.Storage;
+using Windows.Storage.FileProperties;
 
 namespace AudiobookApp.Views
 {
@@ -24,31 +18,77 @@ namespace AudiobookApp.Views
 
         public ImportBookDialog(Book book, IEnumerable<LibraryCategory> categories)
         {
-            this.InitializeComponent();
+            InitializeComponent();
 
             Book = book;
 
             TitleText.Text = book.Title;
+            AuthorText.Text = book.Author;
 
-            CategoryCombo.ItemsSource = categories;
+            var options = new List<CategoryOption>
+            {
+                new CategoryOption { Name = "None" }
+            };
+
+            options.AddRange(categories.Select(c => new CategoryOption
+            {
+                Name = c.Name,
+                Category = c
+            }));
+
+            CategoryCombo.ItemsSource = options;
             CategoryCombo.DisplayMemberPath = "Name";
+            CategoryCombo.SelectedIndex = 0;
+
+            Loaded += async (_, _) => await LoadCoverAsync();
         }
 
-        private void Import_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        private async System.Threading.Tasks.Task LoadCoverAsync()
+        {
+            if (string.IsNullOrWhiteSpace(Book.FilePath))
+                return;
+
+            try
+            {
+                var file = await StorageFile.GetFileFromPathAsync(Book.FilePath);
+                var thumbnail = await file.GetThumbnailAsync(
+                    ThumbnailMode.SingleItem,
+                    240);
+
+                if (thumbnail != null)
+                {
+                    var bitmap = new BitmapImage();
+                    await bitmap.SetSourceAsync(thumbnail);
+                    CoverImage.Source = bitmap;
+                    CoverPlaceholder.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch
+            {
+                // Keep the placeholder when cover art is unavailable.
+            }
+        }
+
+        private void Import_Click(object sender, RoutedEventArgs e)
         {
             var book = Book;
 
-            if (CategoryCombo.SelectedItem is LibraryCategory category)
+            if (CategoryCombo.SelectedItem is CategoryOption option && option.Category != null)
             {
-                book.CategoryName = category.Name;
+                book.CategoryName = option.Category.Name;
             }
             else
             {
-                book.CategoryName = "All Books";
+                book.CategoryName = "";
             }
 
             ImportConfirmed?.Invoke(book);
         }
+
+        private sealed class CategoryOption
+        {
+            public string Name { get; set; } = "";
+            public LibraryCategory? Category { get; set; }
+        }
     }
 }
-

@@ -3,8 +3,20 @@
   "WorkspaceRootPath": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\models\\book.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\models\\book.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\views\\bookspage.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\views\\bookspage.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\views\\importbookdialog.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\views\\importbookdialog.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
@@ -13,18 +25,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\viewmodels\\mainviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\viewmodels\\mainviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\models\\book.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\models\\book.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\views\\importbookdialog.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\views\\importbookdialog.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|c:\\users\\kyle\\source\\repos\\audiobookapp\\audiobookapp\\views\\bookspage.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{18693D4D-D2AD-40E3-B40C-702E4E1D8F30}|AudiobookApp\\AudiobookApp.csproj|solutionrelative:audiobookapp\\views\\bookspage.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -34,11 +34,11 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 2,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 1,
               "Title": "BooksPage.xaml.cs",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\Views\\BooksPage.xaml.cs",
               "RelativeDocumentMoniker": "AudiobookApp\\Views\\BooksPage.xaml.cs",
@@ -50,32 +50,32 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 0,
               "Title": "Book.cs",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\Models\\Book.cs",
               "RelativeDocumentMoniker": "AudiobookApp\\Models\\Book.cs",
               "ToolTip": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\Models\\Book.cs",
               "RelativeToolTip": "AudiobookApp\\Models\\Book.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAuAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAOAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-23T10:35:48.781Z"
+              "WhenOpened": "2026-06-23T10:35:48.781Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
               "Title": "MainWindow.xaml.cs",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\MainWindow.xaml.cs",
               "RelativeDocumentMoniker": "AudiobookApp\\MainWindow.xaml.cs",
               "ToolTip": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\MainWindow.xaml.cs",
               "RelativeToolTip": "AudiobookApp\\MainWindow.xaml.cs",
-              "ViewState": "AgIAAGQAAAAAAAAAAAAcwIYAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAIYAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-23T10:12:57.784Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-23T10:12:57.784Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 3,
               "Title": "ImportBookDialog.xaml.cs",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\Views\\ImportBookDialog.xaml.cs",
               "RelativeDocumentMoniker": "AudiobookApp\\Views\\ImportBookDialog.xaml.cs",
@@ -87,7 +87,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 4,
               "Title": "MainWindow.xaml",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\MainWindow.xaml",
               "RelativeDocumentMoniker": "AudiobookApp\\MainWindow.xaml",
@@ -99,7 +99,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 5,
               "Title": "MainViewModel.cs",
               "DocumentMoniker": "C:\\Users\\Kyle\\source\\repos\\AudiobookApp\\AudiobookApp\\ViewModels\\MainViewModel.cs",
               "RelativeDocumentMoniker": "AudiobookApp\\ViewModels\\MainViewModel.cs",

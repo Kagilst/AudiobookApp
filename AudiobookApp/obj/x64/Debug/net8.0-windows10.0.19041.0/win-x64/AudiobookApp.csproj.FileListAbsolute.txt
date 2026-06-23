@@ -276,3 +276,4 @@ C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-window
 C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Views\ImportBookDialog.g.cs
 C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Views\ImportBookDialog.xaml
 C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Views\ImportBookDialog.xbf
+c:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AudiobookApp.sourcelink.json

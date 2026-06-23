@@ -29,7 +29,7 @@
                 </Button>
 
                 <!-- CATEGORY LIST (ONLY reorderable items) -->
-                <ListView x:Name="CategoryList" Grid.Row="1" CanReorderItems="True" AllowDrop="True" SelectionMode="Single">
+                <ListView x:Name="CategoryList" Grid.Row="1" CanReorderItems="True" AllowDrop="True" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="CategoryList_ItemClick">
                     
                     <ListView.ItemTemplate>
                         
