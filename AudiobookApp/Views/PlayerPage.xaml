@@ -7,7 +7,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    >
+
+    <Page.Resources>
+        <local:SecondsToTimeConverter x:Key="SecondsToTimeConverter" />
+    </Page.Resources>
 
     <StackPanel
         HorizontalAlignment="Center"
@@ -65,13 +70,52 @@
                 Click="PlayPauseButton_Click">
 
                 <SymbolIcon
-                x:Name="PlayPauseIcon"
-                Symbol="Play"/>
+                    x:Name="PlayPauseIcon"
+                    Symbol="Play"/>
             </Button>
 
             <Button x:Name="NextButton">
                 <SymbolIcon Symbol="Next"/>
             </Button>
+
+        </StackPanel>
+
+        <StackPanel
+            Width="500"
+            HorizontalAlignment="Center"
+            Spacing="8">
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+            x:Name="CurrentTimeText"
+            VerticalAlignment="Center"
+            Text="00:00:00"/>
+
+                <Slider  
+            x:Name="ProgressSlider"
+            Grid.Column="1"
+            Margin="10,0"
+            Minimum="0"
+            Maximum="100"
+            ValueChanged="ProgressSlider_ValueChanged"
+            PointerPressed="ProgressSlider_PointerPressed"
+            PointerReleased="ProgressSlider_PointerReleased"
+            PointerCaptureLost="PositionSlider_DragCompleted"
+            StepFrequency="1"
+            ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+
+                <TextBlock
+            x:Name="TotalTimeText"
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Text="00:00:00"/>
+            </Grid>
 
         </StackPanel>
 

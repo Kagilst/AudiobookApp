@@ -7,7 +7,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    >
+
+    <Page.Resources>
+        <local:SecondsToTimeConverter x:Key="SecondsToTimeConverter" />
+    </Page.Resources>
 
     <StackPanel
         HorizontalAlignment="Center"
@@ -22,9 +27,9 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1">
             <Grid>
-                <Image x:ConnectionId='9' x:Name="CoverImage"
+                <Image x:ConnectionId='12' x:Name="CoverImage"
                Stretch="UniformToFill"/>
-                <FontIcon x:ConnectionId='10' x:Name="CoverPlaceholder"
+                <FontIcon x:ConnectionId='13' x:Name="CoverPlaceholder"
                   Glyph="&#xE8D6;"
                   FontSize="48"
                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -54,24 +59,63 @@
             HorizontalAlignment="Center"
             Spacing="20">
 
-            <Button x:ConnectionId='5' x:Name="PreviousButton">
+            <Button x:ConnectionId='8' x:Name="PreviousButton">
                 <SymbolIcon Symbol="Previous"/>
             </Button>
 
-            <Button x:ConnectionId='6'
+            <Button x:ConnectionId='9'
                 x:Name="PlayPauseButton"
                 Width="64"
                 Height="64"
                                              >
 
-                <SymbolIcon x:ConnectionId='8'
-                x:Name="PlayPauseIcon"
-                Symbol="Play"/>
+                <SymbolIcon x:ConnectionId='11'
+                    x:Name="PlayPauseIcon"
+                    Symbol="Play"/>
             </Button>
 
-            <Button x:ConnectionId='7' x:Name="NextButton">
+            <Button x:ConnectionId='10' x:Name="NextButton">
                 <SymbolIcon Symbol="Next"/>
             </Button>
+
+        </StackPanel>
+
+        <StackPanel
+            Width="500"
+            HorizontalAlignment="Center"
+            Spacing="8">
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:ConnectionId='5'
+            x:Name="CurrentTimeText"
+            VerticalAlignment="Center"
+            Text="00:00:00"/>
+
+                <Slider x:ConnectionId='6'  
+            x:Name="ProgressSlider"
+            Grid.Column="1"
+            Margin="10,0"
+            Minimum="0"
+            Maximum="100"
+                                                      
+                                                          
+                                                            
+                                                             
+            StepFrequency="1"
+            ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+
+                <TextBlock x:ConnectionId='7'
+            x:Name="TotalTimeText"
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Text="00:00:00"/>
+            </Grid>
 
         </StackPanel>
 

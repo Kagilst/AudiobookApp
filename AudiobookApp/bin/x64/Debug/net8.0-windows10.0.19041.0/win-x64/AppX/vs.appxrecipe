@@ -29,7 +29,7 @@
     <AppXManifest Include="C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AppxManifest.xml">
       <PackagePath>AppxManifest.xml</PackagePath>
       <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
-      <Modified>2026-06-23T18:20:57.652</Modified>
+      <Modified>2026-06-24T21:12:47.115</Modified>
     </AppXManifest>
   </ItemGroup>
   <ItemGroup>
@@ -39,11 +39,11 @@
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\apphost.exe">
       <PackagePath>AudiobookApp.exe</PackagePath>
-      <Modified>2026-06-23T18:20:57.311</Modified>
+      <Modified>2026-06-24T21:12:46.821</Modified>
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AudiobookApp.dll">
       <PackagePath>AudiobookApp.dll</PackagePath>
-      <Modified>2026-06-23T18:20:57.298</Modified>
+      <Modified>2026-06-24T21:12:46.816</Modified>
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Users\Kyle\.nuget\packages\microsoft.netcore.app.runtime.win-x64\8.0.13\runtimes\win-x64\lib\net8.0\Microsoft.CSharp.dll">
       <PackagePath>Microsoft.CSharp.dll</PackagePath>
@@ -979,7 +979,7 @@
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Users\Kyle\source\repos\AudiobookApp\AudiobookApp\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\resources.pri">
       <PackagePath>resources.pri</PackagePath>
-      <Modified>2026-06-23T18:20:57.403</Modified>
+      <Modified>2026-06-24T21:00:14.338</Modified>
     </AppxPackagedFile>
   </ItemGroup>
   <ItemGroup>

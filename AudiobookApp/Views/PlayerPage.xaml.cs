@@ -29,6 +29,8 @@ namespace AudiobookApp.Views
         private readonly Book _book;
         private bool _isPlaying;
         private bool _sourceLoaded;
+        private DispatcherTimer _timer = new();
+        private bool _isDraggingSlider;
 
         //Constructor
         public PlayerPage(Book book)
@@ -41,6 +43,25 @@ namespace AudiobookApp.Views
             AuthorText.Text = book.Author;
 
             Loaded += async (_, _) => await LoadCoverAsync();
+
+            Unloaded += PlayerPage_Unloaded;
+
+            _timer.Interval = TimeSpan.FromSeconds(1);
+            _timer.Tick += Timer_Tick;
+            _timer.Start();
+        }
+
+        private void PlayerPage_Unloaded(object sender, RoutedEventArgs e)
+        {
+            _timer.Stop();
+
+            if (AudioPlayer.MediaPlayer != null)
+            {
+                AudioPlayer.MediaPlayer.Pause();
+                AudioPlayer.MediaPlayer.Source = null;
+            }
+
+            AudioPlayer.Source = null;
         }
 
         //Load Cover Art
@@ -71,7 +92,7 @@ namespace AudiobookApp.Views
             }
             catch
             {
-                // Keep placeholder visible
+                // Keeps placeholder visible
             }
         }
 
@@ -86,6 +107,9 @@ namespace AudiobookApp.Views
                         new Uri(_book.FilePath));
 
                 _sourceLoaded = true;
+
+                AudioPlayer.MediaPlayer.PlaybackSession.PositionChanged +=
+                    PlaybackSession_PositionChanged;
             }
 
             if (!_isPlaying)
@@ -106,12 +130,98 @@ namespace AudiobookApp.Views
             }
         }
 
+        //Slider
+        private void PlaybackSession_PositionChanged(
+            Windows.Media.Playback.MediaPlaybackSession sender,
+            object args)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Actual Position: {sender.Position}");
+        }
+
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
-            AudioPlayer.MediaPlayer?.Pause();
+            _timer.Stop();
+
+            if (AudioPlayer.MediaPlayer != null)
+            {
+                AudioPlayer.MediaPlayer.Pause();
+                AudioPlayer.MediaPlayer.Source = null;
+            }
+
+            AudioPlayer.Source = null;
 
             base.OnNavigatedFrom(e);
         }
+        private void Timer_Tick(object? sender, object e)
+        {
+            if (AudioPlayer.MediaPlayer == null)
+                return;
 
+            var session = AudioPlayer.MediaPlayer.PlaybackSession;
+
+            if (session.NaturalDuration <= TimeSpan.Zero)
+                return;
+
+            ProgressSlider.Maximum = session.NaturalDuration.TotalSeconds;
+
+            if (!_isDraggingSlider)
+            {
+                ProgressSlider.Value = session.Position.TotalSeconds;
+            }
+
+            CurrentTimeText.Text = session.Position.ToString(@"hh\:mm\:ss");
+
+            TotalTimeText.Text = session.NaturalDuration.ToString(@"hh\:mm\:ss");
+        }
+
+        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (!_isDraggingSlider)
+                return;
+
+            CurrentTimeText.Text =TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
+        }
+
+        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingSlider = true;
+        }
+
+        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            SeekToSliderPosition();
+        }
+        private void PositionSlider_DragCompleted(object sender, PointerRoutedEventArgs e)
+        {
+            SeekToSliderPosition();
+        }
+
+        private void SeekToSliderPosition()
+        {
+            if (AudioPlayer.MediaPlayer == null)
+                return;
+
+            AudioPlayer.MediaPlayer.PlaybackSession.Position =
+                TimeSpan.FromSeconds(ProgressSlider.Value);
+
+            _isDraggingSlider = false;
+        }
+       
+    }
+
+
+    // Tool Tip Converter 
+    public class SecondsToTimeConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            double seconds = value is double d ? d : 0;
+            TimeSpan time = TimeSpan.FromSeconds(seconds);
+            return $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
     }
 }
