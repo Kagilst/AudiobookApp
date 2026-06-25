@@ -104,9 +104,9 @@
             Minimum="0"
             Maximum="100"
                                                       
-                                                          
-                                                            
-                                                             
+            ManipulationMode="TranslateX"
+                                                                    
+                                                                        
             StepFrequency="1"
             ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
 

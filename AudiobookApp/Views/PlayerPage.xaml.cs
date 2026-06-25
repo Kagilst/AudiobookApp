@@ -163,36 +163,31 @@ namespace AudiobookApp.Views
             if (session.NaturalDuration <= TimeSpan.Zero)
                 return;
 
-            ProgressSlider.Maximum = session.NaturalDuration.TotalSeconds;
+            ProgressSlider.Maximum =
+                session.NaturalDuration.TotalSeconds;
 
+            // DON'T touch the slider while dragging
             if (!_isDraggingSlider)
             {
-                ProgressSlider.Value = session.Position.TotalSeconds;
+                ProgressSlider.Value =
+                    session.Position.TotalSeconds;
             }
 
-            CurrentTimeText.Text = session.Position.ToString(@"hh\:mm\:ss");
+            CurrentTimeText.Text =
+                (_isDraggingSlider
+                    ? TimeSpan.FromSeconds(ProgressSlider.Value)
+                    : session.Position)
+                .ToString(@"hh\:mm\:ss");
 
-            TotalTimeText.Text = session.NaturalDuration.ToString(@"hh\:mm\:ss");
+            TotalTimeText.Text =
+                session.NaturalDuration.ToString(@"hh\:mm\:ss");
         }
 
-        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            if (!_isDraggingSlider)
-                return;
-
-            CurrentTimeText.Text =TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
-        }
-
-        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_ManipulationStarted(object sender, ManipulationStartedRoutedEventArgs e)
         {
             _isDraggingSlider = true;
         }
-
-        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            SeekToSliderPosition();
-        }
-        private void PositionSlider_DragCompleted(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_ManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
         {
             SeekToSliderPosition();
         }
@@ -207,7 +202,15 @@ namespace AudiobookApp.Views
 
             _isDraggingSlider = false;
         }
-       
+
+        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (!_isDraggingSlider)
+                return;
+
+            CurrentTimeText.Text = TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
+        }
+
     }
 
 

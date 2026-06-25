@@ -19,5 +19,6 @@ namespace AudiobookApp.Models
         public TimeSpan Duration { get; set; }
 
         public double LastPositionSeconds { get; set; }
+
     }
 }

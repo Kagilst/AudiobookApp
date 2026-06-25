@@ -104,9 +104,9 @@
             Minimum="0"
             Maximum="100"
             ValueChanged="ProgressSlider_ValueChanged"
-            PointerPressed="ProgressSlider_PointerPressed"
-            PointerReleased="ProgressSlider_PointerReleased"
-            PointerCaptureLost="PositionSlider_DragCompleted"
+            ManipulationMode="TranslateX"
+            ManipulationStarted="ProgressSlider_ManipulationStarted"
+            ManipulationCompleted="ProgressSlider_ManipulationCompleted"
             StepFrequency="1"
             ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
 
