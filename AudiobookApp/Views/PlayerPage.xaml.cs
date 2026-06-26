@@ -31,11 +31,14 @@ namespace AudiobookApp.Views
         private bool _sourceLoaded;
         private DispatcherTimer _timer = new();
         private bool _isDraggingSlider;
+        private bool _updatingFromTimer;
 
         //Constructor
         public PlayerPage(Book book)
         {
             InitializeComponent();
+
+            PlaybackSpeedBox.SelectedIndex = 2; //Sets Default Speed to 1
 
             _book = book;
 
@@ -107,9 +110,6 @@ namespace AudiobookApp.Views
                         new Uri(_book.FilePath));
 
                 _sourceLoaded = true;
-
-                AudioPlayer.MediaPlayer.PlaybackSession.PositionChanged +=
-                    PlaybackSession_PositionChanged;
             }
 
             if (!_isPlaying)
@@ -131,15 +131,7 @@ namespace AudiobookApp.Views
         }
 
         //Slider
-        private void PlaybackSession_PositionChanged(
-            Windows.Media.Playback.MediaPlaybackSession sender,
-            object args)
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"Actual Position: {sender.Position}");
-        }
-
-        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        protected override void OnNavigatedFrom(NavigationEventArgs e) // Stops Timer and Playback when leaving player page also prevents looping audio
         {
             _timer.Stop();
 
@@ -155,60 +147,88 @@ namespace AudiobookApp.Views
         }
         private void Timer_Tick(object? sender, object e)
         {
-            if (AudioPlayer.MediaPlayer == null)
+            if (AudioPlayer.MediaPlayer == null) // Prevent crash if no media exists
                 return;
 
             var session = AudioPlayer.MediaPlayer.PlaybackSession;
 
-            if (session.NaturalDuration <= TimeSpan.Zero)
+            if (session.NaturalDuration <= TimeSpan.Zero) // loading audio
                 return;
 
-            ProgressSlider.Maximum =
-                session.NaturalDuration.TotalSeconds;
+            ProgressSlider.Maximum = session.NaturalDuration.TotalSeconds; // slider size based on audio size in seconds
 
-            // DON'T touch the slider while dragging
-            if (!_isDraggingSlider)
+            if (!_isDraggingSlider)//Prevent timer updating slider when moving slider
             {
-                ProgressSlider.Value =
-                    session.Position.TotalSeconds;
+                _updatingFromTimer = true;
+
+                ProgressSlider.Value = session.Position.TotalSeconds;
+
+                _updatingFromTimer = false;
             }
 
-            CurrentTimeText.Text =
-                (_isDraggingSlider
-                    ? TimeSpan.FromSeconds(ProgressSlider.Value)
-                    : session.Position)
-                .ToString(@"hh\:mm\:ss");
+            CurrentTimeText.Text = (_isDraggingSlider ? TimeSpan.FromSeconds(ProgressSlider.Value) : session.Position).ToString(@"hh\:mm\:ss");
 
-            TotalTimeText.Text =
-                session.NaturalDuration.ToString(@"hh\:mm\:ss");
+            TotalTimeText.Text = session.NaturalDuration.ToString(@"hh\:mm\:ss");
         }
 
-        private void ProgressSlider_ManipulationStarted(object sender, ManipulationStartedRoutedEventArgs e)
+        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             _isDraggingSlider = true;
         }
-        private void ProgressSlider_ManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
+
+        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            SeekToSliderPosition();
+
+            _isDraggingSlider = false;
+
+            if (AudioPlayer.MediaPlayer != null)
+            {
+                AudioPlayer.MediaPlayer.PlaybackSession.Position =
+                    TimeSpan.FromSeconds(ProgressSlider.Value);
+            }
+            
         }
 
-        private void SeekToSliderPosition()
+        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e) // Can click new position instead of dragging on slider
         {
+            CurrentTimeText.Text =TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
+
+            if (_isDraggingSlider)
+                return;
+
+            if (_updatingFromTimer)
+                return;
+
             if (AudioPlayer.MediaPlayer == null)
                 return;
 
             AudioPlayer.MediaPlayer.PlaybackSession.Position =
-                TimeSpan.FromSeconds(ProgressSlider.Value);
-
-            _isDraggingSlider = false;
+                TimeSpan.FromSeconds(e.NewValue);
         }
 
-        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        //Speed Controls
+        private void PlaybackSpeedBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!_isDraggingSlider)
+            if (AudioPlayer.MediaPlayer == null)
                 return;
 
-            CurrentTimeText.Text = TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
+            var speed = PlaybackSpeedBox.SelectedIndex switch
+            {
+                0 => 0.5,
+                1 => 0.75,
+                2 => 1.0,
+                3 => 1.25,
+                4 => 1.5,
+                5 => 1.75,
+                6 => 2.0,
+                7 => 2.5,
+                8 => 3.0,
+                9 => 3.5,
+                10 => 4.0,
+                _ => 1.0
+            };
+
+            AudioPlayer.MediaPlayer.PlaybackSession.PlaybackRate = speed;
         }
 
     }

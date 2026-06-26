@@ -20,5 +20,7 @@ namespace AudiobookApp.Models
 
         public double LastPositionSeconds { get; set; }
 
+        public double PlaybackSpeed { get; set; } = 1.0;
+
     }
 }

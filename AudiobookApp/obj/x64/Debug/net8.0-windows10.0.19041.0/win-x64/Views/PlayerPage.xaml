@@ -27,9 +27,9 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1">
             <Grid>
-                <Image x:ConnectionId='12' x:Name="CoverImage"
+                <Image x:ConnectionId='13' x:Name="CoverImage"
                Stretch="UniformToFill"/>
-                <FontIcon x:ConnectionId='13' x:Name="CoverPlaceholder"
+                <FontIcon x:ConnectionId='14' x:Name="CoverPlaceholder"
                   Glyph="&#xE8D6;"
                   FontSize="48"
                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -59,22 +59,22 @@
             HorizontalAlignment="Center"
             Spacing="20">
 
-            <Button x:ConnectionId='8' x:Name="PreviousButton">
+            <Button x:ConnectionId='9' x:Name="PreviousButton">
                 <SymbolIcon Symbol="Previous"/>
             </Button>
 
-            <Button x:ConnectionId='9'
+            <Button x:ConnectionId='10'
                 x:Name="PlayPauseButton"
                 Width="64"
                 Height="64"
                                              >
 
-                <SymbolIcon x:ConnectionId='11'
+                <SymbolIcon x:ConnectionId='12'
                     x:Name="PlayPauseIcon"
                     Symbol="Play"/>
             </Button>
 
-            <Button x:ConnectionId='10' x:Name="NextButton">
+            <Button x:ConnectionId='11' x:Name="NextButton">
                 <SymbolIcon Symbol="Next"/>
             </Button>
 
@@ -92,30 +92,64 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:ConnectionId='5'
+                <TextBlock x:ConnectionId='6'
             x:Name="CurrentTimeText"
             VerticalAlignment="Center"
             Text="00:00:00"/>
 
-                <Slider x:ConnectionId='6'  
-            x:Name="ProgressSlider"
-            Grid.Column="1"
-            Margin="10,0"
-            Minimum="0"
-            Maximum="100"
-                                                      
-            ManipulationMode="TranslateX"
-                                                                    
-                                                                        
-            StepFrequency="1"
-            ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+                <Slider x:ConnectionId='7'
+                x:Name="ProgressSlider"
+                Grid.Column="1"
+                Margin="10,0"
+                Minimum="0"
+                Maximum="100"
+                StepFrequency="1"
 
-                <TextBlock x:ConnectionId='7'
+                                                          
+
+                                                              
+                                                                
+                                                                   
+
+                ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+                
+
+                <TextBlock x:ConnectionId='8'
             x:Name="TotalTimeText"
             Grid.Column="2"
             VerticalAlignment="Center"
             Text="00:00:00"/>
             </Grid>
+
+        </StackPanel>
+
+        <StackPanel
+    Orientation="Horizontal"
+    HorizontalAlignment="Center"
+    Spacing="10">
+
+            <TextBlock
+        Text="Speed"
+        VerticalAlignment="Center"/>
+
+            <ComboBox x:ConnectionId='5'
+        x:Name="PlaybackSpeedBox"
+        Width="90"
+                                                            >
+
+                <ComboBoxItem Content="0.5x"/>
+                <ComboBoxItem Content="0.75x"/>
+                <ComboBoxItem Content="1.0x"/>
+                <ComboBoxItem Content="1.25x"/>
+                <ComboBoxItem Content="1.5x"/>
+                <ComboBoxItem Content="1.75x"/>
+                <ComboBoxItem Content="2.0x"/>
+                <ComboBoxItem Content="2.5x"/>
+                <ComboBoxItem Content="3.0x"/>
+                <ComboBoxItem Content="3.5x"/>
+                <ComboBoxItem Content="4.0x"/>
+
+            </ComboBox>
 
         </StackPanel>
 

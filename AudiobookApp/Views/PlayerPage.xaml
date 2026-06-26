@@ -97,18 +97,22 @@
             VerticalAlignment="Center"
             Text="00:00:00"/>
 
-                <Slider  
-            x:Name="ProgressSlider"
-            Grid.Column="1"
-            Margin="10,0"
-            Minimum="0"
-            Maximum="100"
-            ValueChanged="ProgressSlider_ValueChanged"
-            ManipulationMode="TranslateX"
-            ManipulationStarted="ProgressSlider_ManipulationStarted"
-            ManipulationCompleted="ProgressSlider_ManipulationCompleted"
-            StepFrequency="1"
-            ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+                <Slider
+                x:Name="ProgressSlider"
+                Grid.Column="1"
+                Margin="10,0"
+                Minimum="0"
+                Maximum="100"
+                StepFrequency="1"
+
+                ValueChanged="ProgressSlider_ValueChanged"
+
+                PointerPressed="ProgressSlider_PointerPressed"
+                PointerReleased="ProgressSlider_PointerReleased"
+                PointerCaptureLost="ProgressSlider_PointerReleased"
+
+                ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+                
 
                 <TextBlock
             x:Name="TotalTimeText"
@@ -116,6 +120,36 @@
             VerticalAlignment="Center"
             Text="00:00:00"/>
             </Grid>
+
+        </StackPanel>
+
+        <StackPanel
+    Orientation="Horizontal"
+    HorizontalAlignment="Center"
+    Spacing="10">
+
+            <TextBlock
+        Text="Speed"
+        VerticalAlignment="Center"/>
+
+            <ComboBox
+        x:Name="PlaybackSpeedBox"
+        Width="90"
+        SelectionChanged="PlaybackSpeedBox_SelectionChanged">
+
+                <ComboBoxItem Content="0.5x"/>
+                <ComboBoxItem Content="0.75x"/>
+                <ComboBoxItem Content="1.0x"/>
+                <ComboBoxItem Content="1.25x"/>
+                <ComboBoxItem Content="1.5x"/>
+                <ComboBoxItem Content="1.75x"/>
+                <ComboBoxItem Content="2.0x"/>
+                <ComboBoxItem Content="2.5x"/>
+                <ComboBoxItem Content="3.0x"/>
+                <ComboBoxItem Content="3.5x"/>
+                <ComboBoxItem Content="4.0x"/>
+
+            </ComboBox>
 
         </StackPanel>
 
