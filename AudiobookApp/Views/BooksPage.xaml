@@ -2,13 +2,18 @@
 <Page
     x:Class="AudiobookApp.Views.BooksPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AudiobookApp.Views">
 
     <Page.Resources>
         <DataTemplate x:Key="BookListTemplate">
             <Grid Padding="10">
                 <Grid.ContextFlyout>
                     <MenuFlyout>
+                        <MenuFlyoutItem Text="Rate"
+                                        Click="RateBook_Click"/>
+                        <MenuFlyoutItem Text="Add tags"
+                                        Click="AddTags_Click"/>
                         <MenuFlyoutItem Text="Remove"
                                         Click="RemoveBook_Click"/>
                     </MenuFlyout>
@@ -43,6 +48,12 @@
                         <TextBlock Text="{Binding Author}"
                                    Opacity="0.7"
                                    TextTrimming="CharacterEllipsis"/>
+                        <local:StarRatingControl Rating="{Binding RatingValue}"
+                                                 StarSize="14"/>
+                        <TextBlock Text="{Binding TagsDisplay}"
+                                   Opacity="0.55"
+                                   FontSize="12"
+                                   TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -53,6 +64,10 @@
                   Padding="8">
                 <Grid.ContextFlyout>
                     <MenuFlyout>
+                        <MenuFlyoutItem Text="Rate"
+                                        Click="RateBook_Click"/>
+                        <MenuFlyoutItem Text="Add tags"
+                                        Click="AddTags_Click"/>
                         <MenuFlyoutItem Text="Remove"
                                         Click="RemoveBook_Click"/>
                     </MenuFlyout>
@@ -88,6 +103,9 @@
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
                                    MaxLines="2"/>
+                        <local:StarRatingControl Rating="{Binding RatingValue}"
+                                                 StarSize="12"
+                                                 HorizontalAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -95,48 +113,126 @@
     </Page.Resources>
 
     <Grid Padding="16"
-          RowDefinitions="Auto,*"
+          RowDefinitions="Auto,Auto,*"
           RowSpacing="12">
 
-        <Grid ColumnDefinitions="Auto,*"
+        <Grid ColumnDefinitions="Auto,*,Auto"
               ColumnSpacing="12">
             <Button x:Name="ImportButton"
                     Click="ImportButton_Click">
-                <StackPanel Orientation="Horizontal"
-                            Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
                     <SymbolIcon Symbol="Add"/>
-                    <TextBlock Text="Import Audiobook" VerticalAlignment="Center"/>
+                    <TextBlock Text="Import Book" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
 
-            <StackPanel Grid.Column="1"
+            <Grid Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8"
+                  MaxWidth="520"
+                  HorizontalAlignment="Stretch">
+                <TextBox x:Name="SearchBox"
+                         PlaceholderText="Search title or author"
+                         TextChanged="SearchBox_TextChanged"/>
+                <Button x:Name="FilterButton"
+                        Grid.Column="1"
+                        MinWidth="96">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE71C;" FontSize="14"/>
+                        <TextBlock x:Name="FilterButtonText" Text="Filter"/>
+                    </StackPanel>
+                    <Button.Flyout>
+                        <Flyout x:Name="FilterFlyout" Placement="Bottom">
+                            <StackPanel Width="240" Spacing="8">
+                                <TextBlock Text="Filter"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,4"/>
+
+                                <Button x:Name="TagFilterButton"
+                                        Content="Filter by tag"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Click="TagFilterButton_Click">
+                                    <Button.Flyout>
+                                        <Flyout x:Name="TagFlyout" Placement="Right">
+                                            <StackPanel Width="240" Spacing="12">
+                                                <TextBlock Text="Select tags"
+                                                           FontWeight="SemiBold"/>
+                                                <ListView x:Name="TagFilterList"
+                                                          SelectionMode="Multiple"
+                                                          MaxHeight="240"
+                                                          SelectionChanged="TagFilterList_SelectionChanged">
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding}" Padding="0,4"/>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
+                                                <Button Content="Done"
+                                                        Click="TagFlyoutDone_Click"
+                                                        HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <ToggleButton x:Name="StartedFilterButton"
+                                              Content="Started"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Click="ProgressFilter_Click"/>
+
+                                <ToggleButton x:Name="NotStartedFilterButton"
+                                              Content="Not started"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Click="ProgressFilter_Click"/>
+
+                                <ToggleButton x:Name="CompletedFilterButton"
+                                              Content="Completed"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Click="ProgressFilter_Click"/>
+
+                                <Button Content="Clear filters"
+                                        Click="ClearFilters_Click"
+                                        HorizontalAlignment="Stretch"
+                                        Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+
+            <StackPanel Grid.Column="2"
                         Orientation="Horizontal"
                         Spacing="8"
                         HorizontalAlignment="Right">
                 <ToggleButton x:Name="ListViewButton"
                               Click="ListViewButton_Click"
                               IsChecked="True">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="8">
-                        <FontIcon Glyph="&#xE8FD;"
-                                  FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8FD;" FontSize="14"/>
                         <TextBlock Text="List"/>
                     </StackPanel>
                 </ToggleButton>
 
                 <ToggleButton x:Name="IconViewButton"
                               Click="IconViewButton_Click">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="8">
-                        <FontIcon Glyph="&#xE8A9;"
-                                  FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8A9;" FontSize="14"/>
                         <TextBlock Text="Large icons"/>
                     </StackPanel>
                 </ToggleButton>
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1">
+        <TextBlock x:Name="ActiveFiltersText"
+                   Grid.Row="1"
+                   Opacity="0.7"
+                   Visibility="Collapsed"/>
+
+        <Grid Grid.Row="2">
             <ListView x:Name="BooksList"
                       ItemTemplate="{StaticResource BookListTemplate}"
                       IsItemClickEnabled="True"

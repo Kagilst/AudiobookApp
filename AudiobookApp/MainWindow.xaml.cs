@@ -1,326 +1,266 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using AudiobookApp.ViewModels;
 using AudiobookApp.Models;
-using System.Linq;
 using AudiobookApp.Views;
+using AudiobookApp.Services;
 using WinRT.Interop;
 using Windows.Storage.Pickers;
-using Windows.Storage.FileProperties;
 
 namespace AudiobookApp
 {
     public sealed partial class MainWindow : Window
     {
+        private enum LibraryTab
+        {
+            FullLibrary,
+            Audiobooks,
+            Epubs
+        }
+
         public MainViewModel VM { get; } = new();
 
         private readonly BooksPage _booksPage = new BooksPage();
+        private readonly PlaybackService _playback = new PlaybackService();
+        private LibraryTab _currentTab = LibraryTab.FullLibrary;
+        private bool _showingFullPlayer;
 
-        private SidebarItem? _selectedSidebarItem;
-
-        private string categoriesPath = Path.Combine(
+        private readonly string booksPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "AudiobookApp",
-            "categories.json"
-        );
-
-        private string booksPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "AudiobookApp",
-            "books.json"
-        );
+            "books.json");
 
         public MainWindow()
         {
-            this.InitializeComponent();
+            InitializeComponent();
 
-            LoadCategories();
             LoadBooks();
 
-            _booksPage.ImportRequested += async (_, _) =>
+            MiniPlayer.Attach(_playback);
+            MiniPlayer.ExpandRequested += ShowFullPlayer;
+
+            _playback.PlaybackPersisted += _ => SaveBooks();
+            _playback.StateChanged += () =>
             {
-                await ImportBookAsync();
+                DispatcherQueue.TryEnqueue(UpdateMiniPlayerVisibility);
             };
 
-            _booksPage.RemoveRequested += (book) =>
+            _booksPage.ImportRequested += async (_, _) => await ImportBookAsync();
+            _booksPage.RemoveRequested += RemoveBook;
+            _booksPage.BookSelected += OpenBook;
+            _booksPage.FilterChanged += RefreshCurrentView;
+            _booksPage.TagsChanged += _ =>
             {
-                VM.Books.Remove(book);
                 SaveBooks();
                 RefreshCurrentView();
             };
 
-            _booksPage.BookSelected += OpenBook;
-
-            LoadList();
-            BuildSidebar();
-
-            RefreshBooksView();
-        }
-
-        // ---------------- SIDEBAR SETUP ----------------
-
-        private void LoadList()
-        {
-            CategoryList.ItemsSource = VM.SidebarItems;
-
-            CategoryList.Items.VectorChanged += (s, e) =>
+            _booksPage.RatingChanged += _ =>
             {
-                SyncOrderFromUI();
+                SaveBooks();
+                RefreshCurrentView();
             };
+
+            ShowTab(LibraryTab.FullLibrary);
         }
 
-        private void BuildSidebar()
-        {
-            VM.SidebarItems.Clear();
+        private void FullLibrary_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.FullLibrary);
 
-            foreach (var cat in VM.Categories.OrderBy(c => c.Order))
-            {
-                VM.SidebarItems.Add(new SidebarItem
-                {
-                    Name = cat.Name,
-                    Type = SidebarItemType.Category,
-                    Category = cat
-                });
-            }
+        private void Audiobooks_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Audiobooks);
+
+        private void Epubs_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Epubs);
+
+        private void ShowTab(LibraryTab tab)
+        {
+            _currentTab = tab;
+            _showingFullPlayer = false;
+            UpdateSidebarHighlight();
+            RefreshCurrentView();
+            UpdateMiniPlayerVisibility();
         }
 
-        // ---------------- NAVIGATION ----------------
-
-        private void RefreshBooksView(string? categoryName = null)
+        private void UpdateSidebarHighlight()
         {
-            IEnumerable<Book> books = VM.Books;
+            SetSidebarButtonState(FullLibraryButton, _currentTab == LibraryTab.FullLibrary);
+            SetSidebarButtonState(AudiobooksButton, _currentTab == LibraryTab.Audiobooks);
+            SetSidebarButtonState(EpubsButton, _currentTab == LibraryTab.Epubs);
+        }
 
-            if (!string.IsNullOrWhiteSpace(categoryName))
-            {
-                books = VM.Books.Where(b =>
-                    string.Equals(
-                        b.CategoryName,
-                        categoryName,
-                        StringComparison.OrdinalIgnoreCase));
-            }
-
-            _booksPage.SetBooks(books);
-            ContentFrame.Content = _booksPage;
+        private static void SetSidebarButtonState(Button button, bool selected)
+        {
+            button.FontWeight = selected
+                ? Microsoft.UI.Text.FontWeights.SemiBold
+                : Microsoft.UI.Text.FontWeights.Normal;
+            button.Opacity = selected ? 1.0 : 0.85;
         }
 
         private void RefreshCurrentView()
         {
-            RefreshBooksView(_selectedSidebarItem?.Category?.Name);
-        }
+            IEnumerable<Book> books = VM.Books;
 
-        private void NavigateTo(SidebarItem item)
-        {
-            _selectedSidebarItem = item;
-
-            if (item?.Category == null)
+            books = _currentTab switch
             {
-                RefreshBooksView(); // All Books
-                return;
-            }
-
-            RefreshBooksView(item.Category.Name);
-        }
-
-        // ---------------- SIDEBAR CLICK ----------------
-
-        private void AllBooks_Click(object sender, RoutedEventArgs e)
-        {
-            _selectedSidebarItem = null;
-            CategoryList.SelectedItem = null;
-            RefreshBooksView();
-        }
-
-        private void CategoryList_ItemClick(object sender, ItemClickEventArgs e)
-        {
-            if (e.ClickedItem is SidebarItem item)
-            {
-                NavigateTo(item);
-            }
-        }
-
-        // ---------------- ADD CATEGORY ----------------
-
-        private async void AddCategory_Click(object sender, RoutedEventArgs e)
-        {
-            await ShowAddCategoryDialog();
-        }
-
-        private async Task ShowAddCategoryDialog()
-        {
-            var input = new TextBox
-            {
-                PlaceholderText = "Enter category name"
+                LibraryTab.Audiobooks => books.Where(b => b.MediaType == BookMediaType.Audiobook),
+                LibraryTab.Epubs => books.Where(b => b.MediaType == BookMediaType.Epub),
+                _ => books
             };
 
-            var dialog = new ContentDialog
+            var search = _booksPage.SearchText;
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                Title = "Add Category",
-                Content = input,
-                PrimaryButtonText = "Create",
-                CloseButtonText = "Cancel",
-                XamlRoot = this.Content.XamlRoot
+                books = books.Where(b =>
+                    b.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    b.Author.Contains(search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var selectedTags = _booksPage.SelectedTags;
+            if (selectedTags.Count > 0)
+            {
+                books = books.Where(b =>
+                    selectedTags.All(tag =>
+                        b.Tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))));
+            }
+
+            books = _booksPage.ProgressFilter switch
+            {
+                ProgressFilter.Started => books.Where(b => b.IsStarted),
+                ProgressFilter.NotStarted => books.Where(b => b.IsNotStarted),
+                ProgressFilter.Completed => books.Where(b => b.IsCompleted),
+                _ => books
             };
 
-            var result = await dialog.ShowAsync();
-
-            if (result == ContentDialogResult.Primary)
-            {
-                var name = input.Text?.Trim();
-
-                if (!string.IsNullOrEmpty(name))
-                {
-                    VM.Categories.Add(new LibraryCategory
-                    {
-                        Name = name
-                    });
-
-                    SaveCategories();
-                    BuildSidebar();
-                }
-            }
+            _booksPage.SetAvailableTags(GetAllTags());
+            _booksPage.SetBooks(books);
+            ContentFrame.Content = _booksPage;
+            _showingFullPlayer = false;
+            UpdateMiniPlayerVisibility();
         }
 
-        // ---------------- IMPORT BOOKS ----------------
+        private void UpdateMiniPlayerVisibility()
+        {
+            MiniPlayer.Visibility = _playback.HasSession && !_showingFullPlayer
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private IEnumerable<string> GetAllTags()
+        {
+            return VM.Books
+                .SelectMany(b => b.Tags)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void RemoveBook(Book book)
+        {
+            if (_playback.CurrentBook != null &&
+                string.Equals(_playback.CurrentBook.FilePath, book.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _playback.Pause();
+                // Clear session by opening nothing - simplest: pause and hide via nulling isn't available.
+                // Persist then leave mini player until another book opens; remove from UI session:
+            }
+
+            VM.Books.Remove(book);
+            SaveBooks();
+            RefreshCurrentView();
+        }
 
         private async Task ImportBookAsync()
         {
             var picker = new FileOpenPicker();
-
             picker.FileTypeFilter.Add(".mp3");
             picker.FileTypeFilter.Add(".m4b");
             picker.FileTypeFilter.Add(".mp4");
+            picker.FileTypeFilter.Add(".epub");
 
             var hwnd = WindowNative.GetWindowHandle(this);
             InitializeWithWindow.Initialize(picker, hwnd);
 
             var file = await picker.PickSingleFileAsync();
-
             if (file == null)
                 return;
 
-            var properties = await file.Properties.GetMusicPropertiesAsync();
+            if (IsDuplicatePath(file.Path))
+            {
+                await ShowDuplicateDialogAsync();
+                return;
+            }
+
+            var extension = Path.GetExtension(file.Path);
+            var isEpub = extension.Equals(".epub", StringComparison.OrdinalIgnoreCase);
+
+            string title;
+            string author;
+
+            if (isEpub)
+            {
+                title = Path.GetFileNameWithoutExtension(file.Name);
+                author = "Unknown Author";
+            }
+            else
+            {
+                var properties = await file.Properties.GetMusicPropertiesAsync();
+                title = string.IsNullOrWhiteSpace(properties.Title)
+                    ? Path.GetFileNameWithoutExtension(file.Name)
+                    : properties.Title;
+                author = string.IsNullOrWhiteSpace(properties.Artist)
+                    ? "Unknown Author"
+                    : properties.Artist;
+            }
 
             var book = new Book
             {
-                Title = string.IsNullOrWhiteSpace(properties.Title)
-                    ? Path.GetFileNameWithoutExtension(file.Name)
-                    : properties.Title,
-
-                Author = string.IsNullOrWhiteSpace(properties.Artist)
-                    ? "Unknown Author"
-                    : properties.Artist,
-
-                FilePath = file.Path
+                Title = title,
+                Author = author,
+                FilePath = file.Path,
+                MediaType = isEpub ? BookMediaType.Epub : BookMediaType.Audiobook
             };
 
-            var dialog = new ImportBookDialog(book, VM.Categories);
+            var dialog = new ImportBookDialog(book, GetAllTags());
 
-            dialog.CancelRequested += () =>
-            {
-                _selectedSidebarItem = null;
-                CategoryList.SelectedItem = null;
-                RefreshBooksView();
-            };
+            dialog.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
 
-            dialog.ImportConfirmed += (b) =>
+            dialog.ImportConfirmed += async (imported) =>
             {
-                if (VM.Books.Any(x => x.FilePath == b.FilePath))
+                if (IsDuplicatePath(imported.FilePath))
                 {
-                    _ = new ContentDialog
-                    {
-                        Title = "Duplicate Book",
-                        Content = "This book already exists in your library.",
-                        CloseButtonText = "OK",
-                        XamlRoot = this.Content.XamlRoot
-                    }.ShowAsync();
-
+                    await ShowDuplicateDialogAsync();
                     return;
                 }
 
-                VM.Books.Add(b);
+                VM.Books.Add(imported);
                 SaveBooks();
-
-                RefreshCurrentView();
+                ShowTab(LibraryTab.FullLibrary);
             };
 
+            _showingFullPlayer = false;
             ContentFrame.Content = dialog;
+            UpdateMiniPlayerVisibility();
         }
 
-        // ---------------- EDIT CATEGORY ----------------
-
-        private async void RenameCategory_Click(object sender, RoutedEventArgs e)
+        private bool IsDuplicatePath(string path)
         {
-            var item = ((FrameworkElement)sender).DataContext as SidebarItem;
-            if (item?.Category == null) return;
+            return VM.Books.Any(x =>
+                string.Equals(x.FilePath, path, StringComparison.OrdinalIgnoreCase));
+        }
 
-            var input = new TextBox { Text = item.Category.Name };
-
-            var dialog = new ContentDialog
+        private async Task ShowDuplicateDialogAsync()
+        {
+            await new ContentDialog
             {
-                Title = "Rename Category",
-                Content = input,
-                PrimaryButtonText = "Save",
-                CloseButtonText = "Cancel",
-                XamlRoot = this.Content.XamlRoot
-            };
-
-            var result = await dialog.ShowAsync();
-
-            if (result == ContentDialogResult.Primary)
-            {
-                var oldName = item.Category.Name;
-                item.Category.Name = input.Text.Trim();
-
-                foreach (var book in VM.Books.Where(b =>
-                    string.Equals(b.CategoryName, oldName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    book.CategoryName = item.Category.Name;
-                }
-
-                SaveCategories();
-                SaveBooks();
-                BuildSidebar();
-                RefreshCurrentView();
-            }
-        }
-
-        private void DeleteCategory_Click(object sender, RoutedEventArgs e)
-        {
-            var item = ((FrameworkElement)sender).DataContext as SidebarItem;
-            if (item?.Category == null) return;
-
-            VM.Categories.Remove(item.Category);
-
-            SaveCategories();
-            BuildSidebar();
-        }
-
-        // ---------------- PERSISTENCE ----------------
-
-        private void SyncOrderFromUI()
-        {
-            for (int i = 0; i < VM.SidebarItems.Count; i++)
-            {
-                var item = VM.SidebarItems[i];
-
-                if (item.Type == SidebarItemType.Category && item.Category != null)
-                {
-                    item.Category.Order = i;
-                }
-            }
-
-            SaveCategories();
-        }
-
-        private void SaveCategories()
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(categoriesPath)!);
-            File.WriteAllText(categoriesPath, JsonSerializer.Serialize(VM.Categories));
+                Title = "Duplicate Book",
+                Content = "This book already exists in your library.",
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot
+            }.ShowAsync();
         }
 
         private void SaveBooks()
@@ -329,52 +269,84 @@ namespace AudiobookApp
             File.WriteAllText(booksPath, JsonSerializer.Serialize(VM.Books));
         }
 
-        private void LoadCategories()
-        {
-            if (!File.Exists(categoriesPath))
-                return;
-
-            var json = File.ReadAllText(categoriesPath);
-
-            var list = JsonSerializer.Deserialize<List<LibraryCategory>>(json);
-
-            if (list == null)
-                return;
-
-            VM.Categories.Clear();
-
-            foreach (var item in list.OrderBy(c => c.Order))
-            {
-                VM.Categories.Add(item);
-            }
-        }
-
         private void LoadBooks()
         {
             if (!File.Exists(booksPath))
                 return;
 
             var json = File.ReadAllText(booksPath);
-
             var books = JsonSerializer.Deserialize<List<Book>>(json);
-
             if (books == null)
                 return;
 
             VM.Books.Clear();
-
             foreach (var book in books)
             {
+                book.Tags ??= new List<string>();
+
+                if (book.MediaType == default &&
+                    Path.GetExtension(book.FilePath).Equals(".epub", StringComparison.OrdinalIgnoreCase))
+                {
+                    book.MediaType = BookMediaType.Epub;
+                }
+
                 VM.Books.Add(book);
             }
         }
 
-        //--------- Player --------
-        private void OpenBook(Book book)
+        private async void OpenBook(Book book)
         {
-            var playerPage = new PlayerPage(book);
+            if (book.MediaType == BookMediaType.Epub)
+            {
+                // Epubs are not played by the audio player yet.
+                return;
+            }
 
-            ContentFrame.Content = playerPage;
+            try
+            {
+                var isSameBook = _playback.CurrentBook != null &&
+                    string.Equals(_playback.CurrentBook.FilePath, book.FilePath, StringComparison.OrdinalIgnoreCase);
+
+                if (!isSameBook)
+                    await _playback.OpenBookAsync(book, autoPlay: false);
+
+                ShowFullPlayer();
+            }
+            catch (Exception ex)
+            {
+                await new ContentDialog
+                {
+                    Title = "Unable to open audiobook",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
+        }
+
+        private void ShowFullPlayer()
+        {
+            if (_playback.CurrentBook == null)
+                return;
+
+            try
+            {
+                _showingFullPlayer = true;
+                ContentFrame.Content = new PlayerPage(_playback);
+                UpdateMiniPlayerVisibility();
+            }
+            catch (Exception ex)
+            {
+                _showingFullPlayer = false;
+                UpdateMiniPlayerVisibility();
+                _ = new ContentDialog
+                {
+                    Title = "Player error",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
         }
     }
 }

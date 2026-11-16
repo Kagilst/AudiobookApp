@@ -1,247 +1,278 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using AudiobookApp.Models;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Storage.FileProperties;
+using AudiobookApp.Models;
+using AudiobookApp.Services;
 using Windows.Storage;
-using System.Threading.Tasks;
-using Windows.Media.Core;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+using Windows.Storage.FileProperties;
 
 namespace AudiobookApp.Views
 {
     public sealed partial class PlayerPage : Page
     {
-        private readonly Book _book;
-        private bool _isPlaying;
-        private bool _sourceLoaded;
-        private DispatcherTimer _timer = new();
+        private readonly PlaybackService _playback;
+        private readonly DispatcherTimer _timer = new();
+
         private bool _isDraggingSlider;
         private bool _updatingFromTimer;
+        private bool _updatingFromService;
+        private int _currentChapterIndex = -1;
 
-        //Constructor
-        public PlayerPage(Book book)
+        public PlayerPage(PlaybackService playback)
         {
+            // Must assign before InitializeComponent: volume/speed controls fire
+            // ValueChanged/SelectionChanged while XAML loads.
+            _playback = playback;
+            _updatingFromService = true;
             InitializeComponent();
 
-            PlaybackSpeedBox.SelectedIndex = 2; //Sets Default Speed to 1
+            PlaybackSpeedBox.SelectedIndex = _playback.SpeedIndex;
+            VolumeSlider.Value = _playback.VolumePercent;
+            VolumeValueText.Text = ((int)_playback.VolumePercent).ToString();
+            _updatingFromService = false;
 
-            _book = book;
+            Loaded += async (_, _) =>
+            {
+                await LoadCoverAsync();
+                SyncFromService();
+                ApplyInitialTimeDisplay();
+            };
 
-            TitleText.Text = book.Title;
-            AuthorText.Text = book.Author;
+            Unloaded += (_, _) =>
+            {
+                _timer.Stop();
+                _playback.StateChanged -= Playback_StateChanged;
+                _playback.PersistPlaybackState();
+            };
 
-            Loaded += async (_, _) => await LoadCoverAsync();
+            _playback.StateChanged += Playback_StateChanged;
 
-            Unloaded += PlayerPage_Unloaded;
-
-            _timer.Interval = TimeSpan.FromSeconds(1);
+            _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += Timer_Tick;
             _timer.Start();
         }
 
-        private void PlayerPage_Unloaded(object sender, RoutedEventArgs e)
+        private void Playback_StateChanged()
         {
-            _timer.Stop();
-
-            if (AudioPlayer.MediaPlayer != null)
-            {
-                AudioPlayer.MediaPlayer.Pause();
-                AudioPlayer.MediaPlayer.Source = null;
-            }
-
-            AudioPlayer.Source = null;
+            DispatcherQueue.TryEnqueue(SyncFromService);
         }
 
-        //Load Cover Art
-        private async Task LoadCoverAsync()
+        private void SyncFromService()
         {
-            if (string.IsNullOrWhiteSpace(_book.FilePath))
+            var book = _playback.CurrentBook;
+            if (book == null)
+                return;
+
+            _updatingFromService = true;
+
+            TitleText.Text = book.Title;
+            AuthorText.Text = book.Author;
+            PlayPauseIcon.Symbol = _playback.IsPlaying ? Symbol.Pause : Symbol.Play;
+
+            if (PlaybackSpeedBox.SelectedIndex != _playback.SpeedIndex)
+                PlaybackSpeedBox.SelectedIndex = _playback.SpeedIndex;
+
+            if (Math.Abs(VolumeSlider.Value - _playback.VolumePercent) > 0.1)
+                VolumeSlider.Value = _playback.VolumePercent;
+
+            VolumeValueText.Text = ((int)_playback.VolumePercent).ToString();
+
+            if (_playback.HasChapters)
+            {
+                ChapterText.Visibility = Visibility.Visible;
+                var index = _playback.FindChapterIndex(_playback.Player.PlaybackSession.Position);
+                UpdateChapterUi(index, force: true);
+            }
+            else
+            {
+                ChapterText.Visibility = Visibility.Collapsed;
+            }
+
+            _updatingFromService = false;
+        }
+
+        private async System.Threading.Tasks.Task LoadCoverAsync()
+        {
+            var book = _playback.CurrentBook;
+            if (book == null || string.IsNullOrWhiteSpace(book.FilePath))
                 return;
 
             try
             {
-                var file = await StorageFile.GetFileFromPathAsync(_book.FilePath);
+                var file = await StorageFile.GetFileFromPathAsync(book.FilePath);
+                var thumbnail = await file.GetThumbnailAsync(ThumbnailMode.SingleItem, 300);
+                if (thumbnail == null)
+                    return;
 
-                var thumbnail = await file.GetThumbnailAsync(
-                    ThumbnailMode.SingleItem,
-                    300);
-
-                if (thumbnail != null)
-                {
-                    var bitmap = new BitmapImage();
-
-                    await bitmap.SetSourceAsync(thumbnail);
-
-                    CoverImage.Source = bitmap;
-
-                    CoverPlaceholder.Visibility =
-                        Visibility.Collapsed;
-                }
+                var bitmap = new BitmapImage();
+                await bitmap.SetSourceAsync(thumbnail);
+                CoverImage.Source = bitmap;
+                CoverPlaceholder.Visibility = Visibility.Collapsed;
             }
             catch
             {
-                // Keeps placeholder visible
+                // Keep placeholder.
             }
         }
 
-        //Play Pause Button
+        private void ApplyInitialTimeDisplay() => UpdateTimeDisplay(forceChapter: true);
 
-        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
+        private void Timer_Tick(object? sender, object e) => UpdateTimeDisplay();
+
+        private void UpdateTimeDisplay(bool forceChapter = false)
         {
-            if (!_sourceLoaded)
-            {
-                AudioPlayer.Source =
-                    MediaSource.CreateFromUri(
-                        new Uri(_book.FilePath));
-
-                _sourceLoaded = true;
-            }
-
-            if (!_isPlaying)
-            {
-                AudioPlayer.MediaPlayer.Play();
-
-                PlayPauseIcon.Symbol = Symbol.Pause;
-
-                _isPlaying = true;
-            }
-            else
-            {
-                AudioPlayer.MediaPlayer.Pause();
-
-                PlayPauseIcon.Symbol = Symbol.Play;
-
-                _isPlaying = false;
-            }
-        }
-
-        //Slider
-        protected override void OnNavigatedFrom(NavigationEventArgs e) // Stops Timer and Playback when leaving player page also prevents looping audio
-        {
-            _timer.Stop();
-
-            if (AudioPlayer.MediaPlayer != null)
-            {
-                AudioPlayer.MediaPlayer.Pause();
-                AudioPlayer.MediaPlayer.Source = null;
-            }
-
-            AudioPlayer.Source = null;
-
-            base.OnNavigatedFrom(e);
-        }
-        private void Timer_Tick(object? sender, object e)
-        {
-            if (AudioPlayer.MediaPlayer == null) // Prevent crash if no media exists
+            var book = _playback.CurrentBook;
+            if (book == null)
                 return;
 
-            var session = AudioPlayer.MediaPlayer.PlaybackSession;
+            var session = _playback.Player.PlaybackSession;
+            var absolute = _isDraggingSlider
+                ? GetAbsolutePositionFromSlider()
+                : session.Position;
 
-            if (session.NaturalDuration <= TimeSpan.Zero) // loading audio
-                return;
-
-            ProgressSlider.Maximum = session.NaturalDuration.TotalSeconds; // slider size based on audio size in seconds
-
-            if (!_isDraggingSlider)//Prevent timer updating slider when moving slider
+            if (_playback.HasChapters)
             {
+                var chapterIndex = _playback.FindChapterIndex(absolute);
+                UpdateChapterUi(chapterIndex, forceChapter);
+
+                var chapter = _playback.Chapters[chapterIndex];
+                var chapterPosition = absolute - chapter.Start;
+                if (chapterPosition < TimeSpan.Zero)
+                    chapterPosition = TimeSpan.Zero;
+
                 _updatingFromTimer = true;
-
-                ProgressSlider.Value = session.Position.TotalSeconds;
-
+                ProgressSlider.Maximum = Math.Max(chapter.Duration.TotalSeconds, 0.1);
+                if (!_isDraggingSlider)
+                {
+                    ProgressSlider.Value = Math.Clamp(
+                        chapterPosition.TotalSeconds,
+                        0,
+                        ProgressSlider.Maximum);
+                }
                 _updatingFromTimer = false;
+
+                CurrentTimeText.Text = FormatTime(_isDraggingSlider
+                    ? TimeSpan.FromSeconds(ProgressSlider.Value)
+                    : chapterPosition);
+                TotalTimeText.Text = FormatTime(chapter.Duration);
+                return;
             }
 
-            CurrentTimeText.Text = (_isDraggingSlider ? TimeSpan.FromSeconds(ProgressSlider.Value) : session.Position).ToString(@"hh\:mm\:ss");
+            var total = session.NaturalDuration > TimeSpan.Zero
+                ? session.NaturalDuration
+                : book.Duration;
 
-            TotalTimeText.Text = session.NaturalDuration.ToString(@"hh\:mm\:ss");
+            if (total <= TimeSpan.Zero && session.NaturalDuration <= TimeSpan.Zero)
+                return;
+
+            _updatingFromTimer = true;
+            ProgressSlider.Maximum = total > TimeSpan.Zero ? total.TotalSeconds : 1;
+            if (!_isDraggingSlider)
+            {
+                ProgressSlider.Value = Math.Clamp(absolute.TotalSeconds, 0, ProgressSlider.Maximum);
+            }
+            _updatingFromTimer = false;
+
+            CurrentTimeText.Text = FormatTime(_isDraggingSlider
+                ? TimeSpan.FromSeconds(ProgressSlider.Value)
+                : absolute);
+            TotalTimeText.Text = total > TimeSpan.Zero ? FormatTime(total) : "--:--";
         }
 
-        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void UpdateChapterUi(int chapterIndex, bool force = false)
         {
-            _isDraggingSlider = true;
+            if (!_playback.HasChapters || chapterIndex < 0 || chapterIndex >= _playback.Chapters.Count)
+                return;
+
+            if (!force && chapterIndex == _currentChapterIndex)
+                return;
+
+            _currentChapterIndex = chapterIndex;
+            var chapter = _playback.Chapters[chapterIndex];
+            ChapterText.Text = $"{chapter.Title}  ({chapterIndex + 1}/{_playback.Chapters.Count})";
+            ChapterText.Visibility = Visibility.Visible;
         }
+
+        private TimeSpan GetAbsolutePositionFromSlider()
+        {
+            if (_playback.HasChapters)
+            {
+                var index = _currentChapterIndex >= 0 ? _currentChapterIndex : 0;
+                return _playback.Chapters[index].Start + TimeSpan.FromSeconds(ProgressSlider.Value);
+            }
+
+            return TimeSpan.FromSeconds(ProgressSlider.Value);
+        }
+
+        private void PlayPauseButton_Click(object sender, RoutedEventArgs e) => _playback.TogglePlayPause();
+
+        private void RewindButton_Click(object sender, RoutedEventArgs e) => _playback.SeekBySeconds(-10);
+
+        private void FastForwardButton_Click(object sender, RoutedEventArgs e) => _playback.SeekBySeconds(10);
+
+        private void PreviousButton_Click(object sender, RoutedEventArgs e) => _playback.PreviousChapter();
+
+        private void NextButton_Click(object sender, RoutedEventArgs e) => _playback.NextChapter();
+
+        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e) => _isDraggingSlider = true;
 
         private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-
             _isDraggingSlider = false;
-
-            if (AudioPlayer.MediaPlayer != null)
-            {
-                AudioPlayer.MediaPlayer.PlaybackSession.Position =
-                    TimeSpan.FromSeconds(ProgressSlider.Value);
-            }
-            
+            _playback.SeekTo(GetAbsolutePositionFromSlider());
         }
 
-        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e) // Can click new position instead of dragging on slider
+        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            CurrentTimeText.Text =TimeSpan.FromSeconds(e.NewValue).ToString(@"hh\:mm\:ss");
+            if (CurrentTimeText != null)
+                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
 
-            if (_isDraggingSlider)
+            if (_isDraggingSlider || _updatingFromTimer || _updatingFromService)
                 return;
 
-            if (_updatingFromTimer)
-                return;
-
-            if (AudioPlayer.MediaPlayer == null)
-                return;
-
-            AudioPlayer.MediaPlayer.PlaybackSession.Position =
-                TimeSpan.FromSeconds(e.NewValue);
+            _playback.SeekTo(GetAbsolutePositionFromSlider());
         }
 
-        //Speed Controls
         private void PlaybackSpeedBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (AudioPlayer.MediaPlayer == null)
+            if (_updatingFromService || _playback == null)
                 return;
 
-            var speed = PlaybackSpeedBox.SelectedIndex switch
-            {
-                0 => 0.5,
-                1 => 0.75,
-                2 => 1.0,
-                3 => 1.25,
-                4 => 1.5,
-                5 => 1.75,
-                6 => 2.0,
-                7 => 2.5,
-                8 => 3.0,
-                9 => 3.5,
-                10 => 4.0,
-                _ => 1.0
-            };
-
-            AudioPlayer.MediaPlayer.PlaybackSession.PlaybackRate = speed;
+            _playback.SetSpeedIndex(PlaybackSpeedBox.SelectedIndex);
         }
 
+        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (VolumeValueText != null)
+                VolumeValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
+
+            if (_updatingFromService || _playback == null)
+                return;
+
+            _playback.VolumePercent = e.NewValue;
+        }
+
+        private static string FormatTime(TimeSpan time)
+        {
+            return time.TotalHours >= 1
+                ? time.ToString(@"hh\:mm\:ss")
+                : time.ToString(@"mm\:ss");
+        }
     }
 
-
-    // Tool Tip Converter 
     public class SecondsToTimeConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             double seconds = value is double d ? d : 0;
             TimeSpan time = TimeSpan.FromSeconds(seconds);
-            return $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
+            return time.TotalHours >= 1
+                ? time.ToString(@"hh\:mm\:ss")
+                : time.ToString(@"mm\:ss");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)

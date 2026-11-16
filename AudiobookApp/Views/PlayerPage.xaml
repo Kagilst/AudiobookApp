@@ -54,27 +54,54 @@
             TextWrapping="WrapWholeWords"
             HorizontalAlignment="Center"/>
 
+        <TextBlock
+            x:Name="ChapterText"
+            FontSize="14"
+            FontWeight="SemiBold"
+            TextAlignment="Center"
+            TextWrapping="WrapWholeWords"
+            HorizontalAlignment="Center"
+            Visibility="Collapsed"/>
+
         <StackPanel
             Orientation="Horizontal"
             HorizontalAlignment="Center"
             Spacing="20">
 
-            <Button x:Name="PreviousButton">
+            <Button x:Name="PreviousButton"
+                    Click="PreviousButton_Click">
                 <SymbolIcon Symbol="Previous"/>
             </Button>
 
-            <Button
-                x:Name="PlayPauseButton"
-                Width="64"
-                Height="64"
-                Click="PlayPauseButton_Click">
-
-                <SymbolIcon
-                    x:Name="PlayPauseIcon"
-                    Symbol="Play"/>
+            <Button x:Name="RewindButton"
+                    MinWidth="56"
+                    Click="RewindButton_Click"
+                    ToolTipService.ToolTip="Skip back 10 seconds">
+                <TextBlock Text="-10s"
+                           FontWeight="SemiBold"/>
             </Button>
 
-            <Button x:Name="NextButton">
+            <Button
+    x:Name="PlayPauseButton"
+    Width="64"
+    Height="64"
+    Click="PlayPauseButton_Click">
+
+                <SymbolIcon
+        x:Name="PlayPauseIcon"
+        Symbol="Play"/>
+            </Button>
+
+            <Button x:Name="FastForwardButton"
+                    MinWidth="56"
+                    Click="FastForwardButton_Click"
+                    ToolTipService.ToolTip="Skip forward 10 seconds">
+                <TextBlock Text="+10s"
+                           FontWeight="SemiBold"/>
+            </Button>
+
+            <Button x:Name="NextButton"
+                    Click="NextButton_Click">
                 <SymbolIcon Symbol="Next"/>
             </Button>
 
@@ -124,18 +151,16 @@
         </StackPanel>
 
         <StackPanel
-    Orientation="Horizontal"
-    HorizontalAlignment="Center"
-    Spacing="10">
+            Orientation="Horizontal"
+            HorizontalAlignment="Center"
+            Spacing="10">
 
-            <TextBlock
-        Text="Speed"
-        VerticalAlignment="Center"/>
+            <TextBlock Text="Speed"
+                       VerticalAlignment="Center"/>
 
-            <ComboBox
-        x:Name="PlaybackSpeedBox"
-        Width="90"
-        SelectionChanged="PlaybackSpeedBox_SelectionChanged">
+            <ComboBox x:Name="PlaybackSpeedBox"
+                      Width="90"
+                      SelectionChanged="PlaybackSpeedBox_SelectionChanged">
 
                 <ComboBoxItem Content="0.5x"/>
                 <ComboBoxItem Content="0.75x"/>
@@ -153,11 +178,30 @@
 
         </StackPanel>
 
-        <MediaPlayerElement
-            x:Name="AudioPlayer"
-            AreTransportControlsEnabled="False"
-            AutoPlay="False"
-            Visibility="Collapsed"/>
+        <Grid Width="500"
+              ColumnSpacing="12"
+              ColumnDefinitions="Auto,*,Auto">
+            <FontIcon Glyph="&#xE767;"
+                      FontSize="16"
+                      VerticalAlignment="Center"/>
+
+            <Slider x:Name="VolumeSlider"
+                    Grid.Column="1"
+                    Minimum="0"
+                    Maximum="100"
+                    Value="100"
+                    StepFrequency="1"
+                    TickFrequency="10"
+                    IsThumbToolTipEnabled="True"
+                    ValueChanged="VolumeSlider_ValueChanged"/>
+
+            <TextBlock x:Name="VolumeValueText"
+                       Grid.Column="2"
+                       Text="100"
+                       MinWidth="28"
+                       VerticalAlignment="Center"
+                       TextAlignment="Right"/>
+        </Grid>
 
     </StackPanel>
 </Page>

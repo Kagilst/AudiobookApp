@@ -1,81 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Window x:Class="AudiobookApp.MainWindow" 
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:AudiobookApp" 
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-        mc:Ignorable="d" Title="AudiobookApp">
+<Window x:Class="AudiobookApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:AudiobookApp"
+        xmlns:views="using:AudiobookApp.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="AudiobookApp">
 
-    <NavigationView x:Name="RootNav" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed">
-        
-        <!-- LEFT PANE -->
-        <NavigationView.PaneCustomContent>
-            
-            <Grid RowDefinitions="Auto,Auto,*,Auto">
-                
-                <!-- ALL BOOKS (fixed top) -->
-                <Button Click="AllBooks_Click"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Padding="12,10"
-                        Margin="0"
-                        Grid.Row="0">
+    <Grid RowDefinitions="*,Auto">
+        <NavigationView x:Name="RootNav"
+                        PaneDisplayMode="Left"
+                        IsBackButtonVisible="Collapsed"
+                        IsSettingsVisible="False">
 
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Library"/>
-                        <TextBlock Text="All Books"/>
-                    </StackPanel>
+            <NavigationView.PaneCustomContent>
+                <StackPanel Spacing="4" Padding="0,4,0,8">
+                    <Button x:Name="FullLibraryButton"
+                            Click="FullLibrary_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Padding="12,10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Library"/>
+                            <TextBlock Text="Full Library"/>
+                        </StackPanel>
+                    </Button>
 
-                </Button>
+                    <Button x:Name="AudiobooksButton"
+                            Click="Audiobooks_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Padding="12,10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE8D6;" FontSize="16"/>
+                            <TextBlock Text="Audiobooks"/>
+                        </StackPanel>
+                    </Button>
 
-                <!-- CATEGORY LIST (ONLY reorderable items) -->
-                <ListView x:Name="CategoryList" Grid.Row="1" CanReorderItems="True" AllowDrop="True" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="CategoryList_ItemClick">
-                    
-                    <ListView.ItemTemplate>
-                        
-                        <DataTemplate>
-                            
-                            <Grid Padding="6">
-                                
-                                <Grid.ContextFlyout>
-                                    
-                                    <MenuFlyout>
-                                        
-                                        <MenuFlyoutItem Text="Rename" Click="RenameCategory_Click"/>
-                                        <MenuFlyoutItem Text="Delete" Click="DeleteCategory_Click"/>
-                                        
-                                    </MenuFlyout>
-                                    
-                                </Grid.ContextFlyout>
-                                
-                                <TextBlock Text="{Binding Name}" />
-                                
-                            </Grid>
-                            
-                        </DataTemplate>
-                        
-                    </ListView.ItemTemplate>
-                    
-                </ListView>
-                <!-- ADD CATEGORY (fixed bottom) -->
-                <Button Click="AddCategory_Click"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Padding="12,10"
-                        Margin="0"
-                        Grid.Row="2">
+                    <Button x:Name="EpubsButton"
+                            Click="Epubs_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Padding="12,10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE8A5;" FontSize="16"/>
+                            <TextBlock Text="Epubs"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </NavigationView.PaneCustomContent>
 
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Add"/>
-                        <TextBlock Text="Add Category"/>
-                    </StackPanel>
+            <Frame x:Name="ContentFrame"/>
+        </NavigationView>
 
-                </Button>
-
-            </Grid>
-            
-        </NavigationView.PaneCustomContent>
-        <!-- MAIN CONTENT -->
-        <Frame x:Name="ContentFrame"/>
-    </NavigationView>
+        <views:MiniPlayerBar x:Name="MiniPlayer"
+                             Grid.Row="1"
+                             Visibility="Collapsed"/>
+    </Grid>
 </Window>

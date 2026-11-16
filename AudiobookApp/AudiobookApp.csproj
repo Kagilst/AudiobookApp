@@ -16,6 +16,8 @@
     <None Remove="Views\BooksPage.xaml" />
     <None Remove="Views\ImportBookDialog.xaml" />
     <None Remove="Views\PlayerPage.xaml" />
+    <None Remove="Views\StarRatingControl.xaml" />
+    <None Remove="Views\MiniPlayerBar.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,6 +45,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1839" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
+    <PackageReference Include="z440.atl.core" Version="7.20.1" />
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\PlayerPage.xaml">
@@ -56,6 +59,16 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\BooksPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\StarRatingControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\MiniPlayerBar.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
