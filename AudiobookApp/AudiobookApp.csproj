@@ -18,6 +18,7 @@
     <None Remove="Views\PlayerPage.xaml" />
     <None Remove="Views\StarRatingControl.xaml" />
     <None Remove="Views\MiniPlayerBar.xaml" />
+    <None Remove="Views\EpubReaderPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,6 +46,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1839" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
+    <PackageReference Include="VersOne.Epub" Version="3.3.4" />
     <PackageReference Include="z440.atl.core" Version="7.20.1" />
   </ItemGroup>
   <ItemGroup>
@@ -69,6 +71,11 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\MiniPlayerBar.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\EpubReaderPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

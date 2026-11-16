@@ -31,6 +31,11 @@ namespace AudiobookApp.Models
 
         public double LastPositionSeconds { get; set; }
 
+        /// <summary>
+        /// Last EPUB reading-order section index (0-based).
+        /// </summary>
+        public int LastChapterIndex { get; set; }
+
         public double PlaybackSpeed { get; set; } = 1.0;
 
         [JsonIgnore]

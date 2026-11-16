@@ -298,7 +298,7 @@ namespace AudiobookApp
         {
             if (book.MediaType == BookMediaType.Epub)
             {
-                // Epubs are not played by the audio player yet.
+                ShowEpubReader(book);
                 return;
             }
 
@@ -317,6 +317,30 @@ namespace AudiobookApp
                 await new ContentDialog
                 {
                     Title = "Unable to open audiobook",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
+        }
+
+        private void ShowEpubReader(Book book)
+        {
+            try
+            {
+                _showingFullPlayer = true;
+                var reader = new EpubReaderPage(book);
+                reader.ProgressChanged += _ => SaveBooks();
+                ContentFrame.Content = reader;
+                UpdateMiniPlayerVisibility();
+            }
+            catch (Exception ex)
+            {
+                _showingFullPlayer = false;
+                UpdateMiniPlayerVisibility();
+                _ = new ContentDialog
+                {
+                    Title = "Unable to open EPUB",
                     Content = ex.Message,
                     CloseButtonText = "OK",
                     XamlRoot = Content.XamlRoot
