@@ -61,12 +61,20 @@
                             HorizontalAlignment="Center">
                     <TextBlock Text="Series"
                                FontWeight="SemiBold"/>
-                    <RadioButtons x:Name="SeriesModeButtons"
-                                  SelectionChanged="SeriesModeButtons_SelectionChanged">
-                        <RadioButton Content="None" IsChecked="True" Tag="None"/>
-                        <RadioButton x:Name="AddToSeriesRadio" Content="Add to existing series" Tag="Add"/>
-                        <RadioButton Content="Create new series" Tag="Create"/>
-                    </RadioButtons>
+                    <TextBlock Text="Optional. Select an option below, or click it again to clear."
+                               Opacity="0.7"
+                               FontSize="12"
+                               TextWrapping="WrapWholeWords"/>
+                    <ToggleButton x:Name="AddToSeriesToggle"
+                                  Content="Add to existing series"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Click="SeriesToggle_Click"/>
+                    <ToggleButton x:Name="CreateSeriesToggle"
+                                  Content="Create new series"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Click="SeriesToggle_Click"/>
 
                     <ComboBox x:Name="ExistingSeriesCombo"
                               Header="Existing series"

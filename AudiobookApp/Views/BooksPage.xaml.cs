@@ -245,6 +245,8 @@ namespace AudiobookApp.Views
                 BookSelected?.Invoke(item.Book);
         }
 
+        private ContentDialog? _activeSeriesDialog;
+
         private async Task ShowSeriesBooksDialogAsync(LibraryDisplayItem item)
         {
             if (item.Series == null)
@@ -260,10 +262,9 @@ namespace AudiobookApp.Views
                 SelectionMode = ListViewSelectionMode.Single,
                 IsItemClickEnabled = true,
                 Height = 360,
-                Width = 420
+                Width = 440,
+                ItemTemplate = (DataTemplate)Resources["SeriesMemberTemplate"]
             };
-
-            list.ItemTemplate = CreateSeriesMemberTemplate();
 
             var title = new TextBlock
             {
@@ -273,13 +274,21 @@ namespace AudiobookApp.Views
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 TextWrapping = TextWrapping.WrapWholeWords,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+
+            var seriesRating = new StarRatingControl
+            {
+                StarSize = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 12)
             };
+            seriesRating.SetRating(GetSeriesAverageRating(item.Members));
 
             var content = new StackPanel
             {
                 Spacing = 0,
-                Children = { title, list }
+                Children = { title, seriesRating, list }
             };
 
             var dialog = new ContentDialog
@@ -289,6 +298,7 @@ namespace AudiobookApp.Views
                 CloseButtonText = "Close",
                 XamlRoot = XamlRoot
             };
+            _activeSeriesDialog = dialog;
 
             list.ItemClick += (_, args) =>
             {
@@ -301,33 +311,89 @@ namespace AudiobookApp.Views
 
             _ = LoadSeriesMemberCoversAsync(rows);
             await dialog.ShowAsync();
+            _activeSeriesDialog = null;
         }
 
-        private static DataTemplate CreateSeriesMemberTemplate()
+        private static double? GetSeriesAverageRating(IEnumerable<Book> members)
         {
-            // Built in code to avoid extra XAML resources for the dialog.
-            var xaml =
-                @"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
-                    <Grid Padding='8' ColumnSpacing='12'>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width='48'/>
-                            <ColumnDefinition Width='*'/>
-                            <ColumnDefinition Width='Auto'/>
-                        </Grid.ColumnDefinitions>
-                        <Border Width='48' Height='48' CornerRadius='4'
-                                Background='{ThemeResource CardBackgroundFillColorDefaultBrush}'>
-                            <Image Source='{Binding CoverImage}' Stretch='UniformToFill'/>
-                        </Border>
-                        <StackPanel Grid.Column='1' VerticalAlignment='Center' Spacing='2'>
-                            <TextBlock Text='{Binding Title}' TextTrimming='CharacterEllipsis'/>
-                            <TextBlock Text='{Binding Author}' Opacity='0.7' TextTrimming='CharacterEllipsis'/>
-                        </StackPanel>
-                        <TextBlock Grid.Column='2' Text='{Binding ProgressText}'
-                                   VerticalAlignment='Center' Opacity='0.7'/>
-                    </Grid>
-                  </DataTemplate>";
+            var rated = members
+                .Where(b => b.Rating.HasValue)
+                .Select(b => b.Rating!.Value)
+                .ToList();
 
-            return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+            if (rated.Count == 0)
+                return null;
+
+            return rated.Average();
+        }
+
+        private async void SeriesMemberRate_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SeriesMemberRow row)
+                return;
+
+            var book = row.Book;
+            var series = FindSeriesForBook(book);
+            _activeSeriesDialog?.Hide();
+
+            await ShowRateBookDialogAsync(book, () => RatingChanged?.Invoke(book));
+
+            if (series != null)
+                await ReopenSeriesDialogAsync(series);
+        }
+
+        private async void SeriesMemberAddTags_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SeriesMemberRow row)
+                return;
+
+            var book = row.Book;
+            var series = FindSeriesForBook(book);
+            _activeSeriesDialog?.Hide();
+
+            await ShowAddTagsDialogAsync(book, () => TagsChanged?.Invoke(book));
+
+            if (series != null)
+                await ReopenSeriesDialogAsync(series);
+        }
+
+        private void SeriesMemberRemove_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SeriesMemberRow row)
+                return;
+
+            _activeSeriesDialog?.Hide();
+            RemoveRequested?.Invoke(row.Book);
+        }
+
+        private async Task ReopenSeriesDialogAsync(Series series)
+        {
+            // Let library refresh (from rating/tags save) finish first.
+            await Task.Yield();
+
+            var item = _displayItems.FirstOrDefault(i =>
+                i.IsSeries && i.Series != null && i.Series.Id == series.Id);
+
+            if (item == null)
+            {
+                var members = series.BookIds
+                    .Select(id => _allBooks.FirstOrDefault(b => b.Id == id))
+                    .Where(b => b != null)
+                    .Cast<Book>()
+                    .ToList();
+
+                if (members.Count == 0)
+                    return;
+
+                item = new LibraryDisplayItem(new LibraryItem
+                {
+                    IsSeries = true,
+                    Series = series,
+                    Members = members
+                });
+            }
+
+            await ShowSeriesBooksDialogAsync(item);
         }
 
         private void ItemContextFlyout_Opening(object sender, object e)
@@ -396,7 +462,11 @@ namespace AudiobookApp.Views
                 item.Book == null)
                 return;
 
-            await ShowAddTagsDialogAsync(item);
+            await ShowAddTagsDialogAsync(item.Book, () =>
+            {
+                item.NotifyTagsChanged();
+                TagsChanged?.Invoke(item.Book);
+            });
         }
 
         private async void RateBook_Click(object sender, RoutedEventArgs e)
@@ -405,7 +475,11 @@ namespace AudiobookApp.Views
                 item.Book == null)
                 return;
 
-            await ShowRateBookDialogAsync(item);
+            await ShowRateBookDialogAsync(item.Book, () =>
+            {
+                item.NotifyRatingChanged();
+                RatingChanged?.Invoke(item.Book);
+            });
         }
 
         private async void AddToSeries_Click(object sender, RoutedEventArgs e)
@@ -567,18 +641,16 @@ namespace AudiobookApp.Views
             return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
         }
 
-        private async Task ShowRateBookDialogAsync(LibraryDisplayItem item)
+        private async Task ShowRateBookDialogAsync(Book book, Action onSaved)
         {
-            var book = item.Book!;
-
             var ratingBox = new NumberBox
             {
-                Header = "Rating (0 – 5)",
+                Header = "Rating (0.0 – 5.0)",
                 Minimum = 0,
                 Maximum = 5,
                 SmallChange = 0.1,
                 LargeChange = 0.5,
-                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden,
                 Value = book.Rating ?? double.NaN,
                 PlaceholderText = "Not rated"
             };
@@ -646,13 +718,11 @@ namespace AudiobookApp.Views
             else
                 book.Rating = Math.Round(Math.Clamp(ratingBox.Value, 0, 5), 2);
 
-            item.NotifyRatingChanged();
-            RatingChanged?.Invoke(book);
+            onSaved();
         }
 
-        private async Task ShowAddTagsDialogAsync(LibraryDisplayItem item)
+        private async Task ShowAddTagsDialogAsync(Book book, Action onSaved)
         {
-            var book = item.Book!;
             book.Tags ??= new List<string>();
 
             var suggestions = DefaultSuggestedTags
@@ -764,8 +834,7 @@ namespace AudiobookApp.Views
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            item.NotifyTagsChanged();
-            TagsChanged?.Invoke(book);
+            onSaved();
         }
 
         private void ListViewButton_Click(object sender, RoutedEventArgs e)
@@ -860,6 +929,8 @@ namespace AudiobookApp.Views
             public string ProgressText =>
                 Book.ProgressPercent > 0 ? $"{Book.ProgressPercent:0}%" : "";
 
+            public double RatingValue => Book.Rating ?? double.NaN;
+
             public ImageSource? CoverImage
             {
                 get => _coverImage;
@@ -868,6 +939,11 @@ namespace AudiobookApp.Views
                     _coverImage = value;
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CoverImage)));
                 }
+            }
+
+            public void NotifyRatingChanged()
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RatingValue)));
             }
         }
 
@@ -922,7 +998,22 @@ namespace AudiobookApp.Views
             public string Title { get; }
             public string Subtitle { get; }
 
-            public double RatingValue => Book?.Rating ?? double.NaN;
+            public double RatingValue
+            {
+                get
+                {
+                    if (IsSeries)
+                    {
+                        var rated = Members
+                            .Where(m => m.Rating.HasValue)
+                            .Select(m => m.Rating!.Value)
+                            .ToList();
+                        return rated.Count == 0 ? double.NaN : rated.Average();
+                    }
+
+                    return Book?.Rating ?? double.NaN;
+                }
+            }
 
             public string TagsDisplay =>
                 Book?.Tags is { Count: > 0 }
@@ -941,8 +1032,7 @@ namespace AudiobookApp.Views
                     ? Visibility.Visible
                     : Visibility.Collapsed;
 
-            public Visibility RatingVisibility =>
-                IsSeries ? Visibility.Collapsed : Visibility.Visible;
+            public Visibility RatingVisibility => Visibility.Visible;
 
             public Visibility BookVisibility =>
                 IsSeries ? Visibility.Collapsed : Visibility.Visible;

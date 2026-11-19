@@ -10,6 +10,7 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
@@ -20,6 +21,8 @@
     <None Remove="Views\MiniPlayerBar.xaml" />
     <None Remove="Views\EpubReaderPage.xaml" />
     <None Remove="Views\MultiFileSortPage.xaml" />
+    <None Remove="Views\DirectoryImportReviewPage.xaml" />
+    <None Remove="Views\DirectorySeriesReviewPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -82,6 +85,16 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\MultiFileSortPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\DirectoryImportReviewPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\DirectorySeriesReviewPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

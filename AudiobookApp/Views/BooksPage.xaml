@@ -6,6 +6,49 @@
     xmlns:local="using:AudiobookApp.Views">
 
     <Page.Resources>
+        <DataTemplate x:Key="SeriesMemberTemplate">
+            <Grid Padding="8">
+                <Grid.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Rate"
+                                        Click="SeriesMemberRate_Click"/>
+                        <MenuFlyoutItem Text="Add tags"
+                                        Click="SeriesMemberAddTags_Click"/>
+                        <MenuFlyoutItem Text="Remove"
+                                        Click="SeriesMemberRemove_Click"/>
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
+
+                <Grid ColumnDefinitions="48,*,Auto"
+                      ColumnSpacing="12">
+                    <Border Width="48"
+                            Height="48"
+                            CornerRadius="4"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <Image Source="{Binding CoverImage}"
+                               Stretch="UniformToFill"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                        <TextBlock Text="{Binding Title}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Author}"
+                                   Opacity="0.7"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <local:StarRatingControl Rating="{Binding RatingValue}"
+                                                 StarSize="12"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding ProgressText}"
+                               VerticalAlignment="Center"
+                               Opacity="0.7"/>
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="BookListTemplate">
             <Grid Padding="10">
                 <Grid.ContextFlyout>

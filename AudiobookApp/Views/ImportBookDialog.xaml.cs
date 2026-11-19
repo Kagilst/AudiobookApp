@@ -73,14 +73,25 @@ namespace AudiobookApp.Views
             if (_series.Count > 0)
                 ExistingSeriesCombo.SelectedIndex = 0;
             else
-                AddToSeriesRadio.IsEnabled = false;
+                AddToSeriesToggle.IsEnabled = false;
 
             LibraryBooksPicker.ItemsSource = _libraryPicks;
+            UpdateSeriesPanels();
 
             Loaded += async (_, _) => await LoadCoverAsync();
         }
 
-        private void SeriesModeButtons_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void SeriesToggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender == AddToSeriesToggle && AddToSeriesToggle.IsChecked == true)
+                CreateSeriesToggle.IsChecked = false;
+            else if (sender == CreateSeriesToggle && CreateSeriesToggle.IsChecked == true)
+                AddToSeriesToggle.IsChecked = false;
+
+            UpdateSeriesPanels();
+        }
+
+        private void UpdateSeriesPanels()
         {
             var mode = GetSeriesMode();
             ExistingSeriesCombo.Visibility = mode == SeriesImportMode.AddToExisting
@@ -93,16 +104,11 @@ namespace AudiobookApp.Views
 
         private SeriesImportMode GetSeriesMode()
         {
-            if (SeriesModeButtons.SelectedItem is RadioButton radio &&
-                radio.Tag is string tag)
-            {
-                return tag switch
-                {
-                    "Add" => SeriesImportMode.AddToExisting,
-                    "Create" => SeriesImportMode.CreateNew,
-                    _ => SeriesImportMode.None
-                };
-            }
+            if (AddToSeriesToggle.IsChecked == true)
+                return SeriesImportMode.AddToExisting;
+
+            if (CreateSeriesToggle.IsChecked == true)
+                return SeriesImportMode.CreateNew;
 
             return SeriesImportMode.None;
         }

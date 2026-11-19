@@ -88,6 +88,30 @@ namespace AudiobookApp
 
         private void Epubs_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Epubs);
 
+        private async void ClearLibrary_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = await new ContentDialog
+            {
+                Title = "Clear library?",
+                Content = "This removes all books and series from your library.",
+                PrimaryButtonText = "Clear all",
+                CloseButtonText = "Cancel",
+                XamlRoot = Content.XamlRoot
+            }.ShowAsync();
+
+            if (confirm != ContentDialogResult.Primary)
+                return;
+
+            if (_playback.HasSession)
+                _playback.Pause();
+
+            VM.Books.Clear();
+            VM.Series.Clear();
+            SaveBooks();
+            SaveSeries();
+            ShowTab(LibraryTab.FullLibrary);
+        }
+
         private void ShowTab(LibraryTab tab)
         {
             _currentTab = tab;
@@ -336,23 +360,48 @@ namespace AudiobookApp
 
         private async Task ImportBookAsync()
         {
+            var modeButtons = new RadioButtons
+            {
+                SelectedIndex = 0
+            };
+            modeButtons.Items.Add("Single file");
+            modeButtons.Items.Add("Multiple audio files");
+            modeButtons.Items.Add("Entire directory");
+
             var modeDialog = new ContentDialog
             {
                 Title = "Import book",
-                Content = "Import one file, or combine multiple audio files into a single book.",
-                PrimaryButtonText = "Single file",
-                SecondaryButtonText = "Multiple audio files",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "Choose how to import.",
+                            TextWrapping = TextWrapping.WrapWholeWords
+                        },
+                        modeButtons
+                    }
+                },
+                PrimaryButtonText = "Continue",
                 CloseButtonText = "Cancel",
                 XamlRoot = Content.XamlRoot
             };
 
             var mode = await modeDialog.ShowAsync();
-            if (mode == ContentDialogResult.None)
+            if (mode != ContentDialogResult.Primary)
                 return;
 
-            if (mode == ContentDialogResult.Secondary)
+            if (modeButtons.SelectedIndex == 1)
             {
                 await ImportMultiFileAudiobookAsync();
+                return;
+            }
+
+            if (modeButtons.SelectedIndex == 2)
+            {
+                await ImportDirectoryAsync();
                 return;
             }
 
@@ -410,6 +459,284 @@ namespace AudiobookApp
             await ShowImportDialogAsync(book);
         }
 
+        private async Task ImportDirectoryAsync()
+        {
+            var picker = new FolderPicker();
+            picker.FileTypeFilter.Add("*");
+
+            var hwnd = WindowNative.GetWindowHandle(this);
+            InitializeWithWindow.Initialize(picker, hwnd);
+
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder == null)
+                return;
+
+            var scanningDialog = new ContentDialog
+            {
+                Title = "Scanning directory",
+                Content = new StackPanel
+                {
+                    Spacing = 16,
+                    Children =
+                    {
+                        new ProgressRing { IsActive = true, Width = 40, Height = 40, HorizontalAlignment = HorizontalAlignment.Center },
+                        new TextBlock
+                        {
+                            Text = "Looking for audiobooks and epubs. Large folders can take a while — please wait.",
+                            TextWrapping = TextWrapping.WrapWholeWords
+                        }
+                    }
+                },
+                XamlRoot = Content.XamlRoot
+            };
+
+            var scanningShow = scanningDialog.ShowAsync();
+
+            List<ImportBookCandidate> candidates;
+            try
+            {
+                var path = folder.Path;
+                candidates = await Task.Run(() => DirectoryBookImporter.ScanDirectory(path));
+            }
+            catch (Exception ex)
+            {
+                scanningDialog.Hide();
+                await scanningShow;
+
+                await new ContentDialog
+                {
+                    Title = "Unable to scan directory",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+                return;
+            }
+            finally
+            {
+                scanningDialog.Hide();
+            }
+
+            await scanningShow;
+
+            if (candidates.Count == 0)
+            {
+                await new ContentDialog
+                {
+                    Title = "No books found",
+                    Content = "No audio or epub files were found in that folder.",
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+                return;
+            }
+
+            // Drop exact path duplicates already in the library.
+            foreach (var candidate in candidates)
+            {
+                candidate.FilePaths = candidate.FilePaths
+                    .Where(p => !IsDuplicatePath(p))
+                    .ToList();
+            }
+
+            candidates = candidates.Where(c => c.FilePaths.Count > 0).ToList();
+            if (candidates.Count == 0)
+            {
+                await ShowDuplicateDialogAsync();
+                return;
+            }
+
+            var review = new DirectoryImportReviewPage(candidates);
+            review.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
+            review.ImportConfirmed += selected => _ = ConfirmDirectoryImportAsync(selected);
+
+            _showingFullPlayer = false;
+            ContentFrame.Content = review;
+            UpdateMiniPlayerVisibility();
+        }
+
+        private async Task ConfirmDirectoryImportAsync(IReadOnlyList<ImportBookCandidate> selected)
+        {
+            // Skip books whose files are already in the library; keep importing the rest.
+            var toImport = selected
+                .Where(c => c.FilePaths.Count > 0)
+                .Where(c => !c.FilePaths.Any(IsDuplicatePath))
+                .ToList();
+
+            if (toImport.Count == 0)
+            {
+                await ShowDuplicateDialogAsync();
+                ShowTab(LibraryTab.FullLibrary);
+                return;
+            }
+
+            var skipped = selected.Count - toImport.Count;
+
+            // Same-title confirmation among books being imported.
+            var duplicateTitles = toImport
+                .GroupBy(c => (c.Title ?? "").Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1)
+                .ToList();
+
+            if (duplicateTitles.Count > 0)
+            {
+                var names = string.Join(
+                    Environment.NewLine,
+                    duplicateTitles.Select(g => $"• \"{g.Key}\" ({g.Count()} books)"));
+
+                var confirmDup = await new ContentDialog
+                {
+                    Title = "Books with the same name",
+                    Content = new ScrollViewer
+                    {
+                        Content = new TextBlock
+                        {
+                            Text =
+                                "These books share the same title. Import them anyway?" +
+                                Environment.NewLine + Environment.NewLine + names,
+                            TextWrapping = TextWrapping.WrapWholeWords
+                        },
+                        MaxHeight = 320
+                    },
+                    PrimaryButtonText = "Import anyway",
+                    CloseButtonText = "Cancel",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+
+                if (confirmDup != ContentDialogResult.Primary)
+                    return;
+            }
+
+            IReadOnlyList<ImportSeriesCandidate> seriesToCreate = Array.Empty<ImportSeriesCandidate>();
+
+            var proposed = DirectorySeriesGrouper.ProposeSeries(toImport);
+            if (proposed.Count > 0)
+            {
+                var ask = await new ContentDialog
+                {
+                    Title = "Auto-group into series?",
+                    Content =
+                        $"{proposed.Count} possible series were found from books in the same folder. " +
+                        "Would you like to review and create them?",
+                    PrimaryButtonText = "Review series",
+                    SecondaryButtonText = "Import without series",
+                    CloseButtonText = "Cancel",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+
+                if (ask == ContentDialogResult.None)
+                    return;
+
+                if (ask == ContentDialogResult.Primary)
+                {
+                    var seriesReview = new DirectorySeriesReviewPage(proposed, toImport);
+                    seriesReview.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
+                    seriesReview.Skipped += () => _ = FinishDirectoryImportAsync(toImport, Array.Empty<ImportSeriesCandidate>(), skipped);
+                    seriesReview.Confirmed += confirmed =>
+                        _ = FinishDirectoryImportAsync(toImport, confirmed, skipped);
+
+                    _showingFullPlayer = false;
+                    ContentFrame.Content = seriesReview;
+                    UpdateMiniPlayerVisibility();
+                    return;
+                }
+            }
+
+            await FinishDirectoryImportAsync(toImport, seriesToCreate, skipped);
+        }
+
+        private async Task FinishDirectoryImportAsync(
+            IReadOnlyList<ImportBookCandidate> toImport,
+            IReadOnlyList<ImportSeriesCandidate> seriesToCreate,
+            int skippedExisting)
+        {
+            var candidateToBook = new Dictionary<Guid, Book>();
+            var added = 0;
+
+            foreach (var candidate in toImport)
+            {
+                if (candidate.FilePaths.Count == 0)
+                    continue;
+
+                if (candidate.FilePaths.Any(IsDuplicatePath))
+                    continue;
+
+                var book = candidate.ToBook();
+
+                if (book.MediaType == BookMediaType.Audiobook)
+                {
+                    var total = TimeSpan.Zero;
+                    foreach (var path in book.AudioFilePaths)
+                    {
+                        try
+                        {
+                            var track = new ATL.Track(path);
+                            if (track.DurationMs > 0)
+                                total += TimeSpan.FromMilliseconds(track.DurationMs);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    book.Duration = total;
+                }
+
+                VM.Books.Add(book);
+                candidateToBook[candidate.Id] = book;
+                added++;
+            }
+
+            foreach (var seriesCandidate in seriesToCreate.Where(s => s.IsSelected && s.Books.Count > 0))
+            {
+                var bookIds = seriesCandidate.Books
+                    .Select(b => candidateToBook.TryGetValue(b.Id, out var book) ? book : null)
+                    .Where(b => b != null)
+                    .Select(b => b!.Id)
+                    .Distinct()
+                    .ToList();
+
+                if (bookIds.Count < 2)
+                    continue;
+
+                foreach (var id in bookIds)
+                    RemoveBookFromAllSeries(id);
+
+                VM.Series.Add(new Series
+                {
+                    Id = Guid.NewGuid(),
+                    Name = string.IsNullOrWhiteSpace(seriesCandidate.Name)
+                        ? "Untitled Series"
+                        : seriesCandidate.Name.Trim(),
+                    BookIds = bookIds
+                });
+            }
+
+            if (added > 0)
+                SaveBooks();
+            if (seriesToCreate.Count > 0)
+                SaveSeries();
+
+            if (skippedExisting > 0 || added > 0)
+            {
+                var message = added == 1
+                    ? "Imported 1 book."
+                    : $"Imported {added} books.";
+                if (skippedExisting > 0)
+                    message += $" Skipped {skippedExisting} already in your library.";
+
+                await new ContentDialog
+                {
+                    Title = "Import complete",
+                    Content = message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
+
+            ShowTab(LibraryTab.FullLibrary);
+        }
+
         private async Task ImportMultiFileAudiobookAsync()
         {
             var picker = new FileOpenPicker();
@@ -425,7 +752,7 @@ namespace AudiobookApp
                 return;
 
             var initialPaths = files
-                .OrderBy(f => f.Name, Comparer<string>.Create(CompareNatural))
+                .OrderBy(f => f.Name, Comparer<string>.Create(DirectoryBookImporter.CompareNatural))
                 .Select(f => f.Path)
                 .ToList();
 
@@ -555,46 +882,6 @@ namespace AudiobookApp
             ContentFrame.Content = dialog;
             UpdateMiniPlayerVisibility();
             await Task.CompletedTask;
-        }
-
-        private static int CompareNatural(string? a, string? b)
-        {
-            a ??= "";
-            b ??= "";
-
-            int i = 0, j = 0;
-            while (i < a.Length && j < b.Length)
-            {
-                if (char.IsDigit(a[i]) && char.IsDigit(b[j]))
-                {
-                    long numA = 0;
-                    while (i < a.Length && char.IsDigit(a[i]))
-                    {
-                        numA = numA * 10 + (a[i] - '0');
-                        i++;
-                    }
-
-                    long numB = 0;
-                    while (j < b.Length && char.IsDigit(b[j]))
-                    {
-                        numB = numB * 10 + (b[j] - '0');
-                        j++;
-                    }
-
-                    if (numA != numB)
-                        return numA.CompareTo(numB);
-                }
-                else
-                {
-                    var cmp = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
-                    if (cmp != 0)
-                        return cmp;
-                    i++;
-                    j++;
-                }
-            }
-
-            return a.Length.CompareTo(b.Length);
         }
 
         private void ApplyImportSeriesChoice(Book imported, ImportSeriesChoice choice)
