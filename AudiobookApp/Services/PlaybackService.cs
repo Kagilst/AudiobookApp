@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ATL;
@@ -33,10 +34,14 @@ namespace AudiobookApp.Services
         };
 
         private readonly List<ChapterMarker> _chapters = new();
+        private readonly List<TimeSpan> _partDurations = new();
+        private readonly List<TimeSpan> _partStarts = new();
         private MediaPlayer? _player;
+        private MediaPlaybackList? _playbackList;
         private bool _sourceLoaded;
         private double _volumePercent = 100;
         private Book? _pendingOpenBook;
+        private TimeSpan _totalDuration;
 
         public MediaPlayer Player => EnsurePlayer();
 
@@ -49,6 +54,10 @@ namespace AudiobookApp.Services
         public bool HasSession => CurrentBook != null;
 
         public bool IsPlaying { get; private set; }
+
+        public TimeSpan TotalDuration => _totalDuration > TimeSpan.Zero
+            ? _totalDuration
+            : CurrentBook?.Duration ?? TimeSpan.Zero;
 
         public double VolumePercent
         {
@@ -80,8 +89,9 @@ namespace AudiobookApp.Services
 
         public async Task OpenBookAsync(Book book, bool autoPlay = false)
         {
-            var isSameBook = CurrentBook != null &&
-                string.Equals(CurrentBook.FilePath, book.FilePath, StringComparison.OrdinalIgnoreCase);
+            book.NormalizeFilePaths();
+
+            var isSameBook = CurrentBook != null && CurrentBook.Id == book.Id;
 
             if (isSameBook && _sourceLoaded)
             {
@@ -101,6 +111,7 @@ namespace AudiobookApp.Services
             IsPlaying = false;
             player.Pause();
 
+            await PrepareTimelineAsync(book);
             LoadChapters(book);
             await LoadSourceAsync(book);
 
@@ -159,19 +170,70 @@ namespace AudiobookApp.Services
             StateChanged?.Invoke();
         }
 
+        public TimeSpan GetAbsolutePosition()
+        {
+            if (_player == null || !_sourceLoaded)
+                return TimeSpan.Zero;
+
+            if (_playbackList == null || _partStarts.Count == 0)
+                return _player.PlaybackSession.Position;
+
+            var index = (int)_playbackList.CurrentItemIndex;
+            if (index < 0 || index >= _partStarts.Count)
+                index = 0;
+
+            return _partStarts[index] + _player.PlaybackSession.Position;
+        }
+
         public void SeekTo(TimeSpan absolutePosition)
         {
             if (_player == null || !_sourceLoaded)
                 return;
 
-            var session = _player.PlaybackSession;
             if (absolutePosition < TimeSpan.Zero)
                 absolutePosition = TimeSpan.Zero;
 
-            if (session.NaturalDuration > TimeSpan.Zero && absolutePosition > session.NaturalDuration)
-                absolutePosition = session.NaturalDuration;
+            var total = TotalDuration;
+            if (total > TimeSpan.Zero && absolutePosition > total)
+                absolutePosition = total;
 
-            session.Position = absolutePosition;
+            if (_playbackList == null || _partStarts.Count <= 1)
+            {
+                _player.PlaybackSession.Position = absolutePosition;
+                StateChanged?.Invoke();
+                return;
+            }
+
+            var partIndex = 0;
+            for (int i = _partStarts.Count - 1; i >= 0; i--)
+            {
+                if (absolutePosition >= _partStarts[i])
+                {
+                    partIndex = i;
+                    break;
+                }
+            }
+
+            var withinPart = absolutePosition - _partStarts[partIndex];
+            if (withinPart < TimeSpan.Zero)
+                withinPart = TimeSpan.Zero;
+
+            if ((int)_playbackList.CurrentItemIndex != partIndex)
+            {
+                void OnItemChanged(MediaPlaybackList sender, CurrentMediaPlaybackItemChangedEventArgs args)
+                {
+                    sender.CurrentItemChanged -= OnItemChanged;
+                    if (_player != null)
+                        _player.PlaybackSession.Position = withinPart;
+                    StateChanged?.Invoke();
+                }
+
+                _playbackList.CurrentItemChanged += OnItemChanged;
+                _playbackList.MoveTo((uint)partIndex);
+                return;
+            }
+
+            _player.PlaybackSession.Position = withinPart;
             StateChanged?.Invoke();
         }
 
@@ -180,7 +242,7 @@ namespace AudiobookApp.Services
             if (_player == null || !_sourceLoaded)
                 return;
 
-            SeekTo(_player.PlaybackSession.Position + TimeSpan.FromSeconds(seconds));
+            SeekTo(GetAbsolutePosition() + TimeSpan.FromSeconds(seconds));
         }
 
         public void PreviousChapter()
@@ -188,7 +250,7 @@ namespace AudiobookApp.Services
             if (!HasChapters || _player == null || !_sourceLoaded)
                 return;
 
-            var position = _player.PlaybackSession.Position;
+            var position = GetAbsolutePosition();
             var index = FindChapterIndex(position);
             var chapter = _chapters[index];
 
@@ -206,7 +268,7 @@ namespace AudiobookApp.Services
             if (!HasChapters || _player == null || !_sourceLoaded)
                 return;
 
-            var index = FindChapterIndex(_player.PlaybackSession.Position);
+            var index = FindChapterIndex(GetAbsolutePosition());
             if (index + 1 >= _chapters.Count)
                 return;
 
@@ -232,11 +294,10 @@ namespace AudiobookApp.Services
             if (CurrentBook == null || _player == null)
                 return;
 
-            var session = _player.PlaybackSession;
-            CurrentBook.LastPositionSeconds = session.Position.TotalSeconds;
+            CurrentBook.LastPositionSeconds = GetAbsolutePosition().TotalSeconds;
 
-            if (session.NaturalDuration > TimeSpan.Zero)
-                CurrentBook.Duration = session.NaturalDuration;
+            if (TotalDuration > TimeSpan.Zero)
+                CurrentBook.Duration = TotalDuration;
 
             CurrentBook.PlaybackSpeed = Speed;
             PlaybackPersisted?.Invoke(CurrentBook);
@@ -256,12 +317,56 @@ namespace AudiobookApp.Services
             return _player;
         }
 
+        private async Task PrepareTimelineAsync(Book book)
+        {
+            _partDurations.Clear();
+            _partStarts.Clear();
+            _totalDuration = TimeSpan.Zero;
+
+            var paths = book.AudioFilePaths;
+            foreach (var path in paths)
+            {
+                var duration = ProbeDuration(path);
+                _partDurations.Add(duration);
+            }
+
+            TimeSpan cursor = TimeSpan.Zero;
+            foreach (var duration in _partDurations)
+            {
+                _partStarts.Add(cursor);
+                cursor += duration;
+            }
+
+            _totalDuration = cursor;
+            if (_totalDuration > TimeSpan.Zero)
+                book.Duration = _totalDuration;
+
+            await Task.CompletedTask;
+        }
+
+        private static TimeSpan ProbeDuration(string path)
+        {
+            try
+            {
+                var track = new Track(path);
+                if (track.DurationMs > 0)
+                    return TimeSpan.FromMilliseconds(track.DurationMs);
+            }
+            catch
+            {
+            }
+
+            return TimeSpan.Zero;
+        }
+
         private async Task LoadSourceAsync(Book book)
         {
             _sourceLoaded = false;
             _pendingOpenBook = book;
+            _playbackList = null;
 
-            if (string.IsNullOrWhiteSpace(book.FilePath))
+            var paths = book.AudioFilePaths;
+            if (paths.Count == 0)
                 return;
 
             var player = EnsurePlayer();
@@ -270,18 +375,25 @@ namespace AudiobookApp.Services
             {
                 player.MediaOpened -= Player_MediaOpened;
 
-                try
+                if (paths.Count == 1)
                 {
-                    var file = await StorageFile.GetFileFromPathAsync(book.FilePath);
-                    player.Source = MediaSource.CreateFromStorageFile(file);
+                    player.Source = await CreateSourceAsync(paths[0]);
                 }
-                catch
+                else
                 {
-                    // Fallback for paths StorageFile cannot open directly.
-                    var path = book.FilePath.Replace('\\', '/');
-                    if (!path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-                        path = "file:///" + path;
-                    player.Source = MediaSource.CreateFromUri(new Uri(path));
+                    var list = new MediaPlaybackList
+                    {
+                        AutoRepeatEnabled = false
+                    };
+
+                    foreach (var path in paths)
+                    {
+                        var source = await CreateSourceAsync(path);
+                        list.Items.Add(new MediaPlaybackItem(source));
+                    }
+
+                    _playbackList = list;
+                    player.Source = list;
                 }
 
                 _sourceLoaded = true;
@@ -299,16 +411,29 @@ namespace AudiobookApp.Services
             }
         }
 
+        private static async Task<MediaSource> CreateSourceAsync(string filePath)
+        {
+            try
+            {
+                var file = await StorageFile.GetFileFromPathAsync(filePath);
+                return MediaSource.CreateFromStorageFile(file);
+            }
+            catch
+            {
+                var path = filePath.Replace('\\', '/');
+                if (!path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                    path = "file:///" + path;
+                return MediaSource.CreateFromUri(new Uri(path));
+            }
+        }
+
         private void Player_MediaOpened(MediaPlayer sender, object args)
         {
             sender.MediaOpened -= Player_MediaOpened;
 
             var book = _pendingOpenBook;
             if (book != null && book.LastPositionSeconds > 0)
-            {
-                sender.PlaybackSession.Position =
-                    TimeSpan.FromSeconds(book.LastPositionSeconds);
-            }
+                SeekTo(TimeSpan.FromSeconds(book.LastPositionSeconds));
 
             StateChanged?.Invoke();
         }
@@ -317,12 +442,36 @@ namespace AudiobookApp.Services
         {
             _chapters.Clear();
 
-            if (string.IsNullOrWhiteSpace(book.FilePath))
+            var paths = book.AudioFilePaths;
+            if (paths.Count == 0)
                 return;
+
+            if (paths.Count > 1)
+            {
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    var start = i < _partStarts.Count ? _partStarts[i] : TimeSpan.Zero;
+                    var end = i + 1 < _partStarts.Count
+                        ? _partStarts[i + 1]
+                        : (_totalDuration > start ? _totalDuration : start);
+
+                    // If duration probe failed, give each unknown part a tiny span so navigation still works.
+                    if (end <= start)
+                        end = start + TimeSpan.FromSeconds(1);
+
+                    var title = Path.GetFileNameWithoutExtension(paths[i]);
+                    if (string.IsNullOrWhiteSpace(title))
+                        title = $"Part {i + 1}";
+
+                    _chapters.Add(new ChapterMarker(title, start, end));
+                }
+
+                return;
+            }
 
             try
             {
-                var track = new Track(book.FilePath);
+                var track = new Track(paths[0]);
                 if (track.Chapters == null || track.Chapters.Count == 0)
                     return;
 

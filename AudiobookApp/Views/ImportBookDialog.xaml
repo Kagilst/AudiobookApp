@@ -59,6 +59,49 @@
                 <StackPanel Spacing="8"
                             Width="320"
                             HorizontalAlignment="Center">
+                    <TextBlock Text="Series"
+                               FontWeight="SemiBold"/>
+                    <RadioButtons x:Name="SeriesModeButtons"
+                                  SelectionChanged="SeriesModeButtons_SelectionChanged">
+                        <RadioButton Content="None" IsChecked="True" Tag="None"/>
+                        <RadioButton x:Name="AddToSeriesRadio" Content="Add to existing series" Tag="Add"/>
+                        <RadioButton Content="Create new series" Tag="Create"/>
+                    </RadioButtons>
+
+                    <ComboBox x:Name="ExistingSeriesCombo"
+                              Header="Existing series"
+                              Visibility="Collapsed"
+                              HorizontalAlignment="Stretch"/>
+
+                    <StackPanel x:Name="CreateSeriesPanel"
+                                Spacing="8"
+                                Visibility="Collapsed">
+                        <TextBox x:Name="NewSeriesNameBox"
+                                 Header="Series name"
+                                 PlaceholderText="e.g. Astral Pet Store"/>
+                        <TextBlock Text="Also add library books (optional)"
+                                   Opacity="0.7"
+                                   FontSize="12"
+                                   TextWrapping="WrapWholeWords"/>
+                        <ListView x:Name="LibraryBooksPicker"
+                                  SelectionMode="Multiple"
+                                  MaxHeight="160">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Padding="2">
+                                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Author}" Opacity="0.7" FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="8"
+                            Width="320"
+                            HorizontalAlignment="Center">
                     <TextBlock Text="Tags"
                                FontWeight="SemiBold"/>
                     <TextBlock Text="Select existing tags or type a new one and press Add."

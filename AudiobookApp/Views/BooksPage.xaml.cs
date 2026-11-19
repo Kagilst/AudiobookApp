@@ -28,17 +28,20 @@ namespace AudiobookApp.Views
             "Romance"
         };
 
-        private readonly ObservableCollection<BookDisplayItem> _displayBooks = new();
+        private readonly ObservableCollection<LibraryDisplayItem> _displayItems = new();
         private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _availableTags = new();
         private ProgressFilter _progressFilter = ProgressFilter.None;
         private bool _suppressFilterEvents;
 
+        private IReadOnlyList<Series> _allSeries = Array.Empty<Series>();
+        private IReadOnlyList<Book> _allBooks = Array.Empty<Book>();
+
         public BooksPage()
         {
             InitializeComponent();
-            BooksList.ItemsSource = _displayBooks;
-            BooksGrid.ItemsSource = _displayBooks;
+            BooksList.ItemsSource = _displayItems;
+            BooksGrid.ItemsSource = _displayItems;
         }
 
         public event EventHandler? ImportRequested;
@@ -47,6 +50,12 @@ namespace AudiobookApp.Views
         public event Action<Book>? BookSelected;
         public event Action<Book>? TagsChanged;
         public event Action<Book>? RatingChanged;
+        public event Action? SeriesChanged;
+        public event Action<Book, Series>? AddBookToSeriesRequested;
+        public event Action<Book, string, IReadOnlyList<Book>>? CreateSeriesRequested;
+        public event Action<Book>? RemoveBookFromSeriesRequested;
+        public event Action<Series, string>? RenameSeriesRequested;
+        public event Action<Series>? DisbandSeriesRequested;
 
         public string SearchText => SearchBox.Text?.Trim() ?? "";
 
@@ -66,7 +75,6 @@ namespace AudiobookApp.Views
 
         private void TagFilterButton_Click(object sender, RoutedEventArgs e)
         {
-            // Nested flyout opens via Button.Flyout.
         }
 
         private void TagFlyoutDone_Click(object sender, RoutedEventArgs e)
@@ -104,15 +112,10 @@ namespace AudiobookApp.Views
             else if (clicked == CompletedFilterButton)
                 selected = ProgressFilter.Completed;
 
-            // Clicking the active filter again clears it.
             if (_progressFilter == selected && clicked.IsChecked == false)
-            {
                 _progressFilter = ProgressFilter.None;
-            }
             else
-            {
                 _progressFilter = selected;
-            }
 
             StartedFilterButton.IsChecked = _progressFilter == ProgressFilter.Started;
             NotStartedFilterButton.IsChecked = _progressFilter == ProgressFilter.NotStarted;
@@ -202,27 +205,195 @@ namespace AudiobookApp.Views
             }
         }
 
-        private void BooksList_ItemClick(object sender, ItemClickEventArgs e)
+        public void SetLibraryContext(IEnumerable<Book> allBooks, IEnumerable<Series> allSeries)
         {
-            if (e.ClickedItem is BookDisplayItem item)
+            _allBooks = allBooks.ToList();
+            _allSeries = allSeries.ToList();
+        }
+
+        public void SetLibraryItems(IEnumerable<LibraryItem> items)
+        {
+            _displayItems.Clear();
+
+            foreach (var item in items)
+                _displayItems.Add(new LibraryDisplayItem(item));
+
+            _ = LoadCoversAsync(_displayItems.ToList());
+        }
+
+        private async void BooksList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is LibraryDisplayItem item)
+                await HandleItemClickAsync(item);
+        }
+
+        private async void BooksGrid_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is LibraryDisplayItem item)
+                await HandleItemClickAsync(item);
+        }
+
+        private async Task HandleItemClickAsync(LibraryDisplayItem item)
+        {
+            if (item.IsSeries)
+            {
+                await ShowSeriesBooksDialogAsync(item);
+                return;
+            }
+
+            if (item.Book != null)
                 BookSelected?.Invoke(item.Book);
         }
 
-        private void BooksGrid_ItemClick(object sender, ItemClickEventArgs e)
+        private async Task ShowSeriesBooksDialogAsync(LibraryDisplayItem item)
         {
-            if (e.ClickedItem is BookDisplayItem item)
-                BookSelected?.Invoke(item.Book);
+            if (item.Series == null)
+                return;
+
+            var rows = new ObservableCollection<SeriesMemberRow>();
+            foreach (var book in item.Members)
+                rows.Add(new SeriesMemberRow(book));
+
+            var list = new ListView
+            {
+                ItemsSource = rows,
+                SelectionMode = ListViewSelectionMode.Single,
+                IsItemClickEnabled = true,
+                Height = 360,
+                Width = 420
+            };
+
+            list.ItemTemplate = CreateSeriesMemberTemplate();
+
+            var title = new TextBlock
+            {
+                Text = item.Series.Name,
+                FontSize = 20,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+
+            var content = new StackPanel
+            {
+                Spacing = 0,
+                Children = { title, list }
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "",
+                Content = content,
+                CloseButtonText = "Close",
+                XamlRoot = XamlRoot
+            };
+
+            list.ItemClick += (_, args) =>
+            {
+                if (args.ClickedItem is SeriesMemberRow row)
+                {
+                    dialog.Hide();
+                    BookSelected?.Invoke(row.Book);
+                }
+            };
+
+            _ = LoadSeriesMemberCoversAsync(rows);
+            await dialog.ShowAsync();
+        }
+
+        private static DataTemplate CreateSeriesMemberTemplate()
+        {
+            // Built in code to avoid extra XAML resources for the dialog.
+            var xaml =
+                @"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
+                    <Grid Padding='8' ColumnSpacing='12'>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width='48'/>
+                            <ColumnDefinition Width='*'/>
+                            <ColumnDefinition Width='Auto'/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width='48' Height='48' CornerRadius='4'
+                                Background='{ThemeResource CardBackgroundFillColorDefaultBrush}'>
+                            <Image Source='{Binding CoverImage}' Stretch='UniformToFill'/>
+                        </Border>
+                        <StackPanel Grid.Column='1' VerticalAlignment='Center' Spacing='2'>
+                            <TextBlock Text='{Binding Title}' TextTrimming='CharacterEllipsis'/>
+                            <TextBlock Text='{Binding Author}' Opacity='0.7' TextTrimming='CharacterEllipsis'/>
+                        </StackPanel>
+                        <TextBlock Grid.Column='2' Text='{Binding ProgressText}'
+                                   VerticalAlignment='Center' Opacity='0.7'/>
+                    </Grid>
+                  </DataTemplate>";
+
+            return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+        }
+
+        private void ItemContextFlyout_Opening(object sender, object e)
+        {
+            if (sender is not MenuFlyout flyout)
+                return;
+
+            var item = (flyout.Target as FrameworkElement)?.DataContext as LibraryDisplayItem;
+            if (item == null)
+                return;
+
+            foreach (var menuItem in flyout.Items.OfType<MenuFlyoutItem>())
+            {
+                var tag = menuItem.Tag as string ?? menuItem.Text;
+
+                if (item.IsSeries)
+                {
+                    menuItem.Visibility = tag is "RenameSeries" or "DisbandSeries"
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+                else
+                {
+                    var inSeries = FindSeriesForBook(item.Book) != null;
+                    menuItem.Visibility = tag switch
+                    {
+                        "RenameSeries" or "DisbandSeries" => Visibility.Collapsed,
+                        "RemoveFromSeries" => inSeries ? Visibility.Visible : Visibility.Collapsed,
+                        "AddToSeries" => !inSeries && _allSeries.Count > 0 ? Visibility.Visible : Visibility.Collapsed,
+                        "CreateSeries" => Visibility.Visible,
+                        "RemoveBook" or "Rate" or "AddTags" or "Add tags" or "Rate" => Visibility.Visible,
+                        _ => Visibility.Visible
+                    };
+
+                    // Rate / Add tags always for books
+                    if (string.Equals(menuItem.Text, "Rate", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(menuItem.Text, "Add tags", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(menuItem.Text, "Remove", StringComparison.OrdinalIgnoreCase))
+                    {
+                        menuItem.Visibility = Visibility.Visible;
+                    }
+                }
+            }
+        }
+
+        private Series? FindSeriesForBook(Book? book)
+        {
+            if (book == null)
+                return null;
+
+            return _allSeries.FirstOrDefault(s => s.BookIds.Contains(book.Id));
         }
 
         private void RemoveBook_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is BookDisplayItem item)
+            if ((sender as FrameworkElement)?.DataContext is LibraryDisplayItem item &&
+                item.Book != null)
+            {
                 RemoveRequested?.Invoke(item.Book);
+            }
         }
 
         private async void AddTags_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not BookDisplayItem item)
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Book == null)
                 return;
 
             await ShowAddTagsDialogAsync(item);
@@ -230,15 +401,175 @@ namespace AudiobookApp.Views
 
         private async void RateBook_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not BookDisplayItem item)
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Book == null)
                 return;
 
             await ShowRateBookDialogAsync(item);
         }
 
-        private async Task ShowRateBookDialogAsync(BookDisplayItem item)
+        private async void AddToSeries_Click(object sender, RoutedEventArgs e)
         {
-            var book = item.Book;
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Book == null)
+                return;
+
+            if (_allSeries.Count == 0)
+                return;
+
+            var combo = new ComboBox
+            {
+                Header = "Series",
+                Width = 320,
+                ItemsSource = _allSeries.Select(s => s.Name).ToList(),
+                SelectedIndex = 0
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "Add to series",
+                Content = combo,
+                PrimaryButtonText = "Add",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            if (combo.SelectedItem is not string name)
+                return;
+
+            var series = _allSeries.FirstOrDefault(s =>
+                string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (series == null)
+                return;
+
+            AddBookToSeriesRequested?.Invoke(item.Book, series);
+        }
+
+        private async void CreateSeries_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Book == null)
+                return;
+
+            var nameBox = new TextBox
+            {
+                Header = "Series name",
+                PlaceholderText = "e.g. Classroom of the Elite"
+            };
+
+            var candidates = _allBooks
+                .Where(b => b.Id != item.Book.Id && FindSeriesForBook(b) == null)
+                .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var picker = new ListView
+            {
+                Header = "Also include (optional)",
+                SelectionMode = ListViewSelectionMode.Multiple,
+                Height = 220,
+                ItemsSource = candidates.Select(b => new BookPickRow(b)).ToList()
+            };
+            picker.ItemTemplate = CreateBookPickTemplate();
+
+            var content = new StackPanel
+            {
+                Spacing = 12,
+                Width = 360,
+                Children = { nameBox, picker }
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "Create series",
+                Content = content,
+                PrimaryButtonText = "Create",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            var name = nameBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            var extra = picker.SelectedItems
+                .OfType<BookPickRow>()
+                .Select(r => r.Book)
+                .ToList();
+
+            CreateSeriesRequested?.Invoke(item.Book, name, extra);
+        }
+
+        private void RemoveFromSeries_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is LibraryDisplayItem item &&
+                item.Book != null)
+            {
+                RemoveBookFromSeriesRequested?.Invoke(item.Book);
+            }
+        }
+
+        private async void RenameSeries_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Series == null)
+                return;
+
+            var nameBox = new TextBox
+            {
+                Header = "Series name",
+                Text = item.Series.Name,
+                Width = 320
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "Rename series",
+                Content = nameBox,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            var name = nameBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            RenameSeriesRequested?.Invoke(item.Series, name);
+        }
+
+        private void DisbandSeries_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is LibraryDisplayItem item &&
+                item.Series != null)
+            {
+                DisbandSeriesRequested?.Invoke(item.Series);
+            }
+        }
+
+        private static DataTemplate CreateBookPickTemplate()
+        {
+            var xaml =
+                @"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
+                    <StackPanel Padding='4'>
+                        <TextBlock Text='{Binding Title}' TextTrimming='CharacterEllipsis'/>
+                        <TextBlock Text='{Binding Author}' Opacity='0.7' FontSize='12' TextTrimming='CharacterEllipsis'/>
+                    </StackPanel>
+                  </DataTemplate>";
+            return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+        }
+
+        private async Task ShowRateBookDialogAsync(LibraryDisplayItem item)
+        {
+            var book = item.Book!;
 
             var ratingBox = new NumberBox
             {
@@ -319,9 +650,9 @@ namespace AudiobookApp.Views
             RatingChanged?.Invoke(book);
         }
 
-        private async Task ShowAddTagsDialogAsync(BookDisplayItem item)
+        private async Task ShowAddTagsDialogAsync(LibraryDisplayItem item)
         {
-            var book = item.Book;
+            var book = item.Book!;
             book.Tags ??= new List<string>();
 
             var suggestions = DefaultSuggestedTags
@@ -437,16 +768,6 @@ namespace AudiobookApp.Views
             TagsChanged?.Invoke(book);
         }
 
-        public void SetBooks(IEnumerable<Book> books)
-        {
-            _displayBooks.Clear();
-
-            foreach (var book in books)
-                _displayBooks.Add(new BookDisplayItem(book));
-
-            _ = LoadCoversAsync(_displayBooks.ToList());
-        }
-
         private void ListViewButton_Click(object sender, RoutedEventArgs e)
         {
             SetDisplayMode(useIconView: false);
@@ -465,56 +786,79 @@ namespace AudiobookApp.Views
             IconViewButton.IsChecked = useIconView;
         }
 
-        private static async Task LoadCoversAsync(IEnumerable<BookDisplayItem> items)
+        private static async Task LoadCoversAsync(IEnumerable<LibraryDisplayItem> items)
         {
             foreach (var item in items)
             {
-                if (string.IsNullOrWhiteSpace(item.Book.FilePath))
+                var paths = item.CoverPaths;
+                if (paths.Count == 0)
                     continue;
 
                 try
                 {
-                    var file = await StorageFile.GetFileFromPathAsync(item.Book.FilePath);
-                    var thumbnail = await file.GetThumbnailAsync(ThumbnailMode.SingleItem, 300);
-
-                    if (thumbnail != null)
-                    {
-                        var bitmap = new BitmapImage();
-                        await bitmap.SetSourceAsync(thumbnail);
-                        item.CoverImage = bitmap;
-                    }
+                    item.CoverImage = await LoadThumbnailAsync(paths[0]);
+                    if (paths.Count > 1)
+                        item.CoverImage2 = await LoadThumbnailAsync(paths[1]);
+                    if (paths.Count > 2)
+                        item.CoverImage3 = await LoadThumbnailAsync(paths[2]);
                 }
                 catch
                 {
-                    // Keep the placeholder when cover art is unavailable.
+                    // Keep placeholders when cover art is unavailable.
                 }
             }
         }
 
-        private sealed class BookDisplayItem : INotifyPropertyChanged
+        private static async Task LoadSeriesMemberCoversAsync(IEnumerable<SeriesMemberRow> rows)
+        {
+            foreach (var row in rows)
+            {
+                try
+                {
+                    row.CoverImage = await LoadThumbnailAsync(row.Book.FilePath);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static async Task<ImageSource?> LoadThumbnailAsync(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            var file = await StorageFile.GetFileFromPathAsync(path);
+            var thumbnail = await file.GetThumbnailAsync(ThumbnailMode.SingleItem, 300);
+            if (thumbnail == null)
+                return null;
+
+            var bitmap = new BitmapImage();
+            await bitmap.SetSourceAsync(thumbnail);
+            return bitmap;
+        }
+
+        private sealed class BookPickRow
+        {
+            public BookPickRow(Book book) => Book = book;
+            public Book Book { get; }
+            public string Title => Book.Title;
+            public string Author => Book.Author;
+        }
+
+        private sealed class SeriesMemberRow : INotifyPropertyChanged
         {
             private ImageSource? _coverImage;
 
-            public BookDisplayItem(Book book)
-            {
-                Book = book;
-            }
+            public SeriesMemberRow(Book book) => Book = book;
 
             public event PropertyChangedEventHandler? PropertyChanged;
 
             public Book Book { get; }
             public string Title => Book.Title;
             public string Author => Book.Author;
-
-            /// <summary>
-            /// NaN means unrated so WinUI can bind to a non-nullable double DP.
-            /// </summary>
-            public double RatingValue => Book.Rating ?? double.NaN;
-
-            public string TagsDisplay =>
-                Book.Tags is { Count: > 0 }
-                    ? string.Join(" · ", Book.Tags)
-                    : "";
+            public string ProgressText =>
+                Book.ProgressPercent > 0 ? $"{Book.ProgressPercent:0}%" : "";
 
             public ImageSource? CoverImage
             {
@@ -523,6 +867,119 @@ namespace AudiobookApp.Views
                 {
                     _coverImage = value;
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CoverImage)));
+                }
+            }
+        }
+
+        private sealed class LibraryDisplayItem : INotifyPropertyChanged
+        {
+            private ImageSource? _coverImage;
+            private ImageSource? _coverImage2;
+            private ImageSource? _coverImage3;
+
+            public LibraryDisplayItem(LibraryItem item)
+            {
+                Source = item;
+                Book = item.Book;
+                Series = item.Series;
+                IsSeries = item.IsSeries;
+                Members = item.Members;
+
+                if (IsSeries && Series != null)
+                {
+                    Title = Series.Name;
+                    Subtitle = Members.Count == 1 ? "1 book" : $"{Members.Count} books";
+                    CoverPaths = Members.Take(3)
+                        .Select(m => m.FilePath)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .ToList();
+                }
+                else if (Book != null)
+                {
+                    Title = Book.Title;
+                    Subtitle = Book.Author;
+                    CoverPaths = string.IsNullOrWhiteSpace(Book.FilePath)
+                        ? new List<string>()
+                        : new List<string> { Book.FilePath };
+                }
+                else
+                {
+                    Title = "";
+                    Subtitle = "";
+                    CoverPaths = new List<string>();
+                }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+
+            public LibraryItem Source { get; }
+            public Book? Book { get; }
+            public Series? Series { get; }
+            public bool IsSeries { get; }
+            public IReadOnlyList<Book> Members { get; }
+            public IReadOnlyList<string> CoverPaths { get; }
+
+            public string Title { get; }
+            public string Subtitle { get; }
+
+            public double RatingValue => Book?.Rating ?? double.NaN;
+
+            public string TagsDisplay =>
+                Book?.Tags is { Count: > 0 }
+                    ? string.Join(" · ", Book.Tags)
+                    : "";
+
+            public double ProgressValue => Book?.ProgressPercent ?? 0;
+
+            public string ProgressText =>
+                !IsSeries && Book != null && Book.ProgressPercent > 0
+                    ? $"{Book.ProgressPercent:0}%"
+                    : "";
+
+            public Visibility ProgressVisibility =>
+                !IsSeries && Book != null && Book.ProgressPercent > 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            public Visibility RatingVisibility =>
+                IsSeries ? Visibility.Collapsed : Visibility.Visible;
+
+            public Visibility BookVisibility =>
+                IsSeries ? Visibility.Collapsed : Visibility.Visible;
+
+            public Visibility StackVisibility =>
+                IsSeries && CoverPaths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+
+            public Visibility MidStackVisibility =>
+                IsSeries && CoverPaths.Count > 2 ? Visibility.Visible : Visibility.Collapsed;
+
+            public ImageSource? CoverImage
+            {
+                get => _coverImage;
+                set
+                {
+                    _coverImage = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CoverImage)));
+                }
+            }
+
+            public ImageSource? CoverImage2
+            {
+                get => _coverImage2;
+                set
+                {
+                    _coverImage2 = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CoverImage2)));
+                }
+            }
+
+            public ImageSource? CoverImage3
+            {
+                get => _coverImage3;
+                set
+                {
+                    _coverImage3 = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CoverImage3)));
                 }
             }
 

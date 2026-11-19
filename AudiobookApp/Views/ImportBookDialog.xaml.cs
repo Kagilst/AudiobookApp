@@ -25,22 +25,38 @@ namespace AudiobookApp.Views
         };
 
         private readonly ObservableCollection<string> _selectedTags = new();
+        private readonly List<Series> _series;
+        private readonly List<BookPickItem> _libraryPicks;
 
         public Book Book { get; set; }
 
-        public event Action<Book>? ImportConfirmed;
+        public event Action<Book, ImportSeriesChoice>? ImportConfirmed;
         public event Action? CancelRequested;
 
-        public ImportBookDialog(Book book, IEnumerable<string> existingTags)
+        public ImportBookDialog(
+            Book book,
+            IEnumerable<string> existingTags,
+            IEnumerable<Series> series,
+            IEnumerable<Book> libraryBooks)
         {
             InitializeComponent();
 
             Book = book;
+            _series = series.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            _libraryPicks = libraryBooks
+                .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(b => new BookPickItem(b))
+                .ToList();
+
             TitleText.Text = book.Title;
-            AuthorText.Text = book.Author;
+            AuthorText.Text = book.IsMultiFileAudiobook
+                ? $"{book.Author} · {book.AudioFilePaths.Count} files"
+                : book.Author;
             HeaderText.Text = book.MediaType == BookMediaType.Epub
                 ? "Import Epub"
-                : "Import Audiobook";
+                : book.IsMultiFileAudiobook
+                    ? "Import Multi-file Audiobook"
+                    : "Import Audiobook";
 
             var suggestions = DefaultSuggestedTags
                 .Concat(existingTags)
@@ -53,7 +69,42 @@ namespace AudiobookApp.Views
             SuggestedTagsList.SelectionChanged += SuggestedTagsList_SelectionChanged;
             SelectedTagsPanel.ItemsSource = _selectedTags;
 
+            ExistingSeriesCombo.ItemsSource = _series.Select(s => s.Name).ToList();
+            if (_series.Count > 0)
+                ExistingSeriesCombo.SelectedIndex = 0;
+            else
+                AddToSeriesRadio.IsEnabled = false;
+
+            LibraryBooksPicker.ItemsSource = _libraryPicks;
+
             Loaded += async (_, _) => await LoadCoverAsync();
+        }
+
+        private void SeriesModeButtons_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var mode = GetSeriesMode();
+            ExistingSeriesCombo.Visibility = mode == SeriesImportMode.AddToExisting
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            CreateSeriesPanel.Visibility = mode == SeriesImportMode.CreateNew
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private SeriesImportMode GetSeriesMode()
+        {
+            if (SeriesModeButtons.SelectedItem is RadioButton radio &&
+                radio.Tag is string tag)
+            {
+                return tag switch
+                {
+                    "Add" => SeriesImportMode.AddToExisting,
+                    "Create" => SeriesImportMode.CreateNew,
+                    _ => SeriesImportMode.None
+                };
+            }
+
+            return SeriesImportMode.None;
         }
 
         private void SuggestedTagsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -138,12 +189,63 @@ namespace AudiobookApp.Views
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            ImportConfirmed?.Invoke(Book);
+            if (Book.Id == Guid.Empty)
+                Book.Id = Guid.NewGuid();
+
+            var choice = new ImportSeriesChoice { Mode = GetSeriesMode() };
+
+            if (choice.Mode == SeriesImportMode.AddToExisting)
+            {
+                if (ExistingSeriesCombo.SelectedItem is string name)
+                {
+                    choice.ExistingSeries = _series.FirstOrDefault(s =>
+                        string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (choice.ExistingSeries == null)
+                    choice.Mode = SeriesImportMode.None;
+            }
+            else if (choice.Mode == SeriesImportMode.CreateNew)
+            {
+                choice.NewSeriesName = NewSeriesNameBox.Text?.Trim() ?? "";
+                choice.AdditionalBooks = LibraryBooksPicker.SelectedItems
+                    .OfType<BookPickItem>()
+                    .Select(p => p.Book)
+                    .ToList();
+
+                if (string.IsNullOrWhiteSpace(choice.NewSeriesName))
+                    choice.Mode = SeriesImportMode.None;
+            }
+
+            ImportConfirmed?.Invoke(Book, choice);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
             CancelRequested?.Invoke();
         }
+
+        private sealed class BookPickItem
+        {
+            public BookPickItem(Book book) => Book = book;
+            public Book Book { get; }
+            public string Title => Book.Title;
+            public string Author => Book.Author;
+        }
+    }
+
+    public enum SeriesImportMode
+    {
+        None,
+        AddToExisting,
+        CreateNew
+    }
+
+    public sealed class ImportSeriesChoice
+    {
+        public SeriesImportMode Mode { get; set; } = SeriesImportMode.None;
+        public Series? ExistingSeries { get; set; }
+        public string NewSeriesName { get; set; } = "";
+        public List<Book> AdditionalBooks { get; set; } = new();
     }
 }

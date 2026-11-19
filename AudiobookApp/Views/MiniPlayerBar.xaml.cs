@@ -111,12 +111,11 @@ namespace AudiobookApp.Views
             if (_playback?.CurrentBook == null || ProgressSlider == null)
                 return;
 
-            var session = _playback.Player.PlaybackSession;
             var absolute = _isDraggingSlider
                 ? GetAbsoluteFromSlider()
-                : session.Position;
+                : _playback.GetAbsolutePosition();
 
-            if (session.NaturalDuration <= TimeSpan.Zero &&
+            if (_playback.TotalDuration <= TimeSpan.Zero &&
                 _playback.CurrentBook.Duration <= TimeSpan.Zero &&
                 !_playback.HasChapters)
             {
@@ -158,8 +157,8 @@ namespace AudiobookApp.Views
             else
             {
                 ChapterText.Visibility = Visibility.Collapsed;
-                var total = session.NaturalDuration > TimeSpan.Zero
-                    ? session.NaturalDuration
+                var total = _playback.TotalDuration > TimeSpan.Zero
+                    ? _playback.TotalDuration
                     : _playback.CurrentBook.Duration;
 
                 _updatingFromTimer = true;

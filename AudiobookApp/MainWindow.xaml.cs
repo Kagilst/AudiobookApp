@@ -36,11 +36,17 @@ namespace AudiobookApp
             "AudiobookApp",
             "books.json");
 
+        private readonly string seriesPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "AudiobookApp",
+            "series.json");
+
         public MainWindow()
         {
             InitializeComponent();
 
             LoadBooks();
+            LoadSeries();
 
             MiniPlayer.Attach(_playback);
             MiniPlayer.ExpandRequested += ShowFullPlayer;
@@ -66,6 +72,12 @@ namespace AudiobookApp
                 SaveBooks();
                 RefreshCurrentView();
             };
+
+            _booksPage.AddBookToSeriesRequested += AddBookToSeries;
+            _booksPage.CreateSeriesRequested += CreateSeriesFromBook;
+            _booksPage.RemoveBookFromSeriesRequested += RemoveBookFromSeries;
+            _booksPage.RenameSeriesRequested += RenameSeries;
+            _booksPage.DisbandSeriesRequested += DisbandSeries;
 
             ShowTab(LibraryTab.FullLibrary);
         }
@@ -102,41 +114,112 @@ namespace AudiobookApp
 
         private void RefreshCurrentView()
         {
-            IEnumerable<Book> books = VM.Books;
+            var booksById = VM.Books.ToDictionary(b => b.Id);
 
-            books = _currentTab switch
+            bool MatchesTab(Book b) => _currentTab switch
             {
-                LibraryTab.Audiobooks => books.Where(b => b.MediaType == BookMediaType.Audiobook),
-                LibraryTab.Epubs => books.Where(b => b.MediaType == BookMediaType.Epub),
-                _ => books
+                LibraryTab.Audiobooks => b.MediaType == BookMediaType.Audiobook,
+                LibraryTab.Epubs => b.MediaType == BookMediaType.Epub,
+                _ => true
             };
 
-            var search = _booksPage.SearchText;
-            if (!string.IsNullOrWhiteSpace(search))
+            bool MatchesSearch(Book b)
             {
-                books = books.Where(b =>
-                    b.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    b.Author.Contains(search, StringComparison.OrdinalIgnoreCase));
+                var search = _booksPage.SearchText;
+                if (string.IsNullOrWhiteSpace(search))
+                    return true;
+
+                return b.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                       b.Author.Contains(search, StringComparison.OrdinalIgnoreCase);
             }
 
-            var selectedTags = _booksPage.SelectedTags;
-            if (selectedTags.Count > 0)
+            bool MatchesTags(Book b)
             {
-                books = books.Where(b =>
-                    selectedTags.All(tag =>
-                        b.Tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))));
+                var selectedTags = _booksPage.SelectedTags;
+                if (selectedTags.Count == 0)
+                    return true;
+
+                return selectedTags.All(tag =>
+                    b.Tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)));
             }
 
-            books = _booksPage.ProgressFilter switch
+            bool MatchesProgress(Book b) => _booksPage.ProgressFilter switch
             {
-                ProgressFilter.Started => books.Where(b => b.IsStarted),
-                ProgressFilter.NotStarted => books.Where(b => b.IsNotStarted),
-                ProgressFilter.Completed => books.Where(b => b.IsCompleted),
-                _ => books
+                ProgressFilter.Started => b.IsStarted,
+                ProgressFilter.NotStarted => b.IsNotStarted,
+                ProgressFilter.Completed => b.IsCompleted,
+                _ => true
             };
+
+            bool MatchesBookFilters(Book b) =>
+                MatchesTab(b) && MatchesSearch(b) && MatchesTags(b) && MatchesProgress(b);
+
+            var items = new List<LibraryItem>();
+            var includedBookIds = new HashSet<Guid>();
+
+            foreach (var series in VM.Series.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                var members = series.BookIds
+                    .Where(id => booksById.ContainsKey(id))
+                    .Select(id => booksById[id])
+                    .ToList();
+
+                if (members.Count == 0)
+                    continue;
+
+                var visibleMembers = members.Where(MatchesBookFilters).ToList();
+
+                var search = _booksPage.SearchText;
+                var seriesNameMatches = !string.IsNullOrWhiteSpace(search) &&
+                    series.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+                if (visibleMembers.Count == 0 && !seriesNameMatches)
+                    continue;
+
+                // If only the series name matched search, still show members that pass tab/tag/progress.
+                if (visibleMembers.Count == 0 && seriesNameMatches)
+                {
+                    visibleMembers = members
+                        .Where(b => MatchesTab(b) && MatchesTags(b) && MatchesProgress(b))
+                        .ToList();
+                }
+
+                if (visibleMembers.Count == 0)
+                    continue;
+
+                // Keep series order for covers/detail, but only include filter-matching members in the popup.
+                var orderedVisible = series.BookIds
+                    .Where(id => visibleMembers.Any(m => m.Id == id))
+                    .Select(id => booksById[id])
+                    .ToList();
+
+                items.Add(new LibraryItem
+                {
+                    IsSeries = true,
+                    Series = series,
+                    Members = orderedVisible
+                });
+
+                foreach (var member in members)
+                    includedBookIds.Add(member.Id);
+            }
+
+            foreach (var book in VM.Books
+                         .Where(b => !includedBookIds.Contains(b.Id))
+                         .Where(MatchesBookFilters)
+                         .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase))
+            {
+                items.Add(new LibraryItem
+                {
+                    IsSeries = false,
+                    Book = book,
+                    Members = new[] { book }
+                });
+            }
 
             _booksPage.SetAvailableTags(GetAllTags());
-            _booksPage.SetBooks(books);
+            _booksPage.SetLibraryContext(VM.Books, VM.Series);
+            _booksPage.SetLibraryItems(items);
             ContentFrame.Content = _booksPage;
             _showingFullPlayer = false;
             UpdateMiniPlayerVisibility();
@@ -164,17 +247,115 @@ namespace AudiobookApp
                 string.Equals(_playback.CurrentBook.FilePath, book.FilePath, StringComparison.OrdinalIgnoreCase))
             {
                 _playback.Pause();
-                // Clear session by opening nothing - simplest: pause and hide via nulling isn't available.
-                // Persist then leave mini player until another book opens; remove from UI session:
             }
 
+            RemoveBookFromAllSeries(book.Id);
             VM.Books.Remove(book);
             SaveBooks();
+            SaveSeries();
             RefreshCurrentView();
+        }
+
+        private void AddBookToSeries(Book book, Series series)
+        {
+            RemoveBookFromAllSeries(book.Id);
+
+            var target = VM.Series.FirstOrDefault(s => s.Id == series.Id);
+            if (target == null)
+                return;
+
+            if (!target.BookIds.Contains(book.Id))
+                target.BookIds.Add(book.Id);
+
+            SaveSeries();
+            RefreshCurrentView();
+        }
+
+        private void CreateSeriesFromBook(Book book, string name, IReadOnlyList<Book> additional)
+        {
+            RemoveBookFromAllSeries(book.Id);
+            foreach (var extra in additional)
+                RemoveBookFromAllSeries(extra.Id);
+
+            var series = new Series
+            {
+                Id = Guid.NewGuid(),
+                Name = name.Trim()
+            };
+
+            series.BookIds.Add(book.Id);
+            foreach (var extra in additional)
+            {
+                if (!series.BookIds.Contains(extra.Id))
+                    series.BookIds.Add(extra.Id);
+            }
+
+            VM.Series.Add(series);
+            SaveSeries();
+            RefreshCurrentView();
+        }
+
+        private void RemoveBookFromSeries(Book book)
+        {
+            RemoveBookFromAllSeries(book.Id);
+            SaveSeries();
+            RefreshCurrentView();
+        }
+
+        private void RenameSeries(Series series, string name)
+        {
+            var target = VM.Series.FirstOrDefault(s => s.Id == series.Id);
+            if (target == null)
+                return;
+
+            target.Name = name.Trim();
+            SaveSeries();
+            RefreshCurrentView();
+        }
+
+        private void DisbandSeries(Series series)
+        {
+            var target = VM.Series.FirstOrDefault(s => s.Id == series.Id);
+            if (target == null)
+                return;
+
+            VM.Series.Remove(target);
+            SaveSeries();
+            RefreshCurrentView();
+        }
+
+        private void RemoveBookFromAllSeries(Guid bookId)
+        {
+            foreach (var series in VM.Series.ToList())
+            {
+                series.BookIds.RemoveAll(id => id == bookId);
+                if (series.BookIds.Count == 0)
+                    VM.Series.Remove(series);
+            }
         }
 
         private async Task ImportBookAsync()
         {
+            var modeDialog = new ContentDialog
+            {
+                Title = "Import book",
+                Content = "Import one file, or combine multiple audio files into a single book.",
+                PrimaryButtonText = "Single file",
+                SecondaryButtonText = "Multiple audio files",
+                CloseButtonText = "Cancel",
+                XamlRoot = Content.XamlRoot
+            };
+
+            var mode = await modeDialog.ShowAsync();
+            if (mode == ContentDialogResult.None)
+                return;
+
+            if (mode == ContentDialogResult.Secondary)
+            {
+                await ImportMultiFileAudiobookAsync();
+                return;
+            }
+
             var picker = new FileOpenPicker();
             picker.FileTypeFilter.Add(".mp3");
             picker.FileTypeFilter.Add(".m4b");
@@ -218,38 +399,250 @@ namespace AudiobookApp
 
             var book = new Book
             {
+                Id = Guid.NewGuid(),
                 Title = title,
                 Author = author,
                 FilePath = file.Path,
+                FilePaths = new List<string> { file.Path },
                 MediaType = isEpub ? BookMediaType.Epub : BookMediaType.Audiobook
             };
 
-            var dialog = new ImportBookDialog(book, GetAllTags());
+            await ShowImportDialogAsync(book);
+        }
 
-            dialog.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
+        private async Task ImportMultiFileAudiobookAsync()
+        {
+            var picker = new FileOpenPicker();
+            picker.FileTypeFilter.Add(".mp3");
+            picker.FileTypeFilter.Add(".m4b");
+            picker.FileTypeFilter.Add(".mp4");
 
-            dialog.ImportConfirmed += async (imported) =>
+            var hwnd = WindowNative.GetWindowHandle(this);
+            InitializeWithWindow.Initialize(picker, hwnd);
+
+            var files = await picker.PickMultipleFilesAsync();
+            if (files == null || files.Count == 0)
+                return;
+
+            var initialPaths = files
+                .OrderBy(f => f.Name, Comparer<string>.Create(CompareNatural))
+                .Select(f => f.Path)
+                .ToList();
+
+            if (initialPaths.Any(IsDuplicatePath))
             {
-                if (IsDuplicatePath(imported.FilePath))
+                await ShowDuplicateDialogAsync();
+                return;
+            }
+
+            var sortPage = new MultiFileSortPage(initialPaths);
+            sortPage.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
+            sortPage.OrderConfirmed += async paths =>
+            {
+                if (paths.Count == 0)
+                {
+                    ShowTab(LibraryTab.FullLibrary);
+                    return;
+                }
+
+                if (paths.Any(IsDuplicatePath))
                 {
                     await ShowDuplicateDialogAsync();
                     return;
                 }
 
+                await FinishMultiFileImportAsync(paths);
+            };
+
+            _showingFullPlayer = false;
+            ContentFrame.Content = sortPage;
+            UpdateMiniPlayerVisibility();
+        }
+
+        private async Task FinishMultiFileImportAsync(IReadOnlyList<string> paths)
+        {
+            var firstPath = paths[0];
+            Windows.Storage.StorageFile first;
+            try
+            {
+                first = await Windows.Storage.StorageFile.GetFileFromPathAsync(firstPath);
+            }
+            catch
+            {
+                await new ContentDialog
+                {
+                    Title = "Unable to import",
+                    Content = "Could not open the first audio file.",
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+                return;
+            }
+
+            var properties = await first.Properties.GetMusicPropertiesAsync();
+
+            var folderName = Path.GetFileName(
+                Path.GetDirectoryName(firstPath) ?? string.Empty);
+
+            var title = !string.IsNullOrWhiteSpace(properties.Album)
+                ? properties.Album
+                : !string.IsNullOrWhiteSpace(folderName)
+                    ? folderName
+                    : Path.GetFileNameWithoutExtension(first.Name);
+
+            var author = !string.IsNullOrWhiteSpace(properties.AlbumArtist)
+                ? properties.AlbumArtist
+                : !string.IsNullOrWhiteSpace(properties.Artist)
+                    ? properties.Artist
+                    : "Unknown Author";
+
+            var totalDuration = TimeSpan.Zero;
+            foreach (var path in paths)
+            {
+                try
+                {
+                    var track = new ATL.Track(path);
+                    if (track.DurationMs > 0)
+                        totalDuration += TimeSpan.FromMilliseconds(track.DurationMs);
+                }
+                catch
+                {
+                }
+            }
+
+            var book = new Book
+            {
+                Id = Guid.NewGuid(),
+                Title = title,
+                Author = author,
+                FilePath = paths[0],
+                FilePaths = paths.ToList(),
+                MediaType = BookMediaType.Audiobook,
+                Duration = totalDuration
+            };
+
+            await ShowImportDialogAsync(book);
+        }
+
+        private async Task ShowImportDialogAsync(Book book)
+        {
+            var booksNotInSeries = GetBooksNotInAnySeries().ToList();
+            var dialog = new ImportBookDialog(book, GetAllTags(), VM.Series, booksNotInSeries);
+
+            dialog.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
+
+            dialog.ImportConfirmed += async (imported, seriesChoice) =>
+            {
+                imported.NormalizeFilePaths();
+
+                if (imported.AudioFilePaths.Any(IsDuplicatePath))
+                {
+                    await ShowDuplicateDialogAsync();
+                    return;
+                }
+
+                if (imported.Id == Guid.Empty)
+                    imported.Id = Guid.NewGuid();
+
                 VM.Books.Add(imported);
+                ApplyImportSeriesChoice(imported, seriesChoice);
                 SaveBooks();
+                SaveSeries();
                 ShowTab(LibraryTab.FullLibrary);
             };
 
             _showingFullPlayer = false;
             ContentFrame.Content = dialog;
             UpdateMiniPlayerVisibility();
+            await Task.CompletedTask;
+        }
+
+        private static int CompareNatural(string? a, string? b)
+        {
+            a ??= "";
+            b ??= "";
+
+            int i = 0, j = 0;
+            while (i < a.Length && j < b.Length)
+            {
+                if (char.IsDigit(a[i]) && char.IsDigit(b[j]))
+                {
+                    long numA = 0;
+                    while (i < a.Length && char.IsDigit(a[i]))
+                    {
+                        numA = numA * 10 + (a[i] - '0');
+                        i++;
+                    }
+
+                    long numB = 0;
+                    while (j < b.Length && char.IsDigit(b[j]))
+                    {
+                        numB = numB * 10 + (b[j] - '0');
+                        j++;
+                    }
+
+                    if (numA != numB)
+                        return numA.CompareTo(numB);
+                }
+                else
+                {
+                    var cmp = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+                    if (cmp != 0)
+                        return cmp;
+                    i++;
+                    j++;
+                }
+            }
+
+            return a.Length.CompareTo(b.Length);
+        }
+
+        private void ApplyImportSeriesChoice(Book imported, ImportSeriesChoice choice)
+        {
+            if (choice.Mode == SeriesImportMode.AddToExisting && choice.ExistingSeries != null)
+            {
+                var target = VM.Series.FirstOrDefault(s => s.Id == choice.ExistingSeries.Id);
+                if (target == null)
+                    return;
+
+                if (!target.BookIds.Contains(imported.Id))
+                    target.BookIds.Add(imported.Id);
+                return;
+            }
+
+            if (choice.Mode == SeriesImportMode.CreateNew)
+            {
+                var series = new Series
+                {
+                    Id = Guid.NewGuid(),
+                    Name = choice.NewSeriesName.Trim()
+                };
+
+                foreach (var extra in choice.AdditionalBooks)
+                {
+                    RemoveBookFromAllSeries(extra.Id);
+                    if (!series.BookIds.Contains(extra.Id))
+                        series.BookIds.Add(extra.Id);
+                }
+
+                if (!series.BookIds.Contains(imported.Id))
+                    series.BookIds.Add(imported.Id);
+
+                VM.Series.Add(series);
+            }
+        }
+
+        private IEnumerable<Book> GetBooksNotInAnySeries()
+        {
+            var inSeries = VM.Series.SelectMany(s => s.BookIds).ToHashSet();
+            return VM.Books.Where(b => !inSeries.Contains(b.Id));
         }
 
         private bool IsDuplicatePath(string path)
         {
             return VM.Books.Any(x =>
-                string.Equals(x.FilePath, path, StringComparison.OrdinalIgnoreCase));
+                x.AudioFilePaths.Any(p =>
+                    string.Equals(p, path, StringComparison.OrdinalIgnoreCase)));
         }
 
         private async Task ShowDuplicateDialogAsync()
@@ -269,6 +662,12 @@ namespace AudiobookApp
             File.WriteAllText(booksPath, JsonSerializer.Serialize(VM.Books));
         }
 
+        private void SaveSeries()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(seriesPath)!);
+            File.WriteAllText(seriesPath, JsonSerializer.Serialize(VM.Series));
+        }
+
         private void LoadBooks()
         {
             if (!File.Exists(booksPath))
@@ -280,9 +679,22 @@ namespace AudiobookApp
                 return;
 
             VM.Books.Clear();
+            var changed = false;
             foreach (var book in books)
             {
                 book.Tags ??= new List<string>();
+                book.FilePaths ??= new List<string>();
+
+                if (book.Id == Guid.Empty)
+                {
+                    book.Id = Guid.NewGuid();
+                    changed = true;
+                }
+
+                var beforeNormalize = book.FilePaths.Count;
+                book.NormalizeFilePaths();
+                if (book.FilePaths.Count != beforeNormalize && beforeNormalize == 0)
+                    changed = true;
 
                 if (book.MediaType == default &&
                     Path.GetExtension(book.FilePath).Equals(".epub", StringComparison.OrdinalIgnoreCase))
@@ -291,6 +703,35 @@ namespace AudiobookApp
                 }
 
                 VM.Books.Add(book);
+            }
+
+            if (changed)
+                SaveBooks();
+        }
+
+        private void LoadSeries()
+        {
+            if (!File.Exists(seriesPath))
+                return;
+
+            var json = File.ReadAllText(seriesPath);
+            var seriesList = JsonSerializer.Deserialize<List<Series>>(json);
+            if (seriesList == null)
+                return;
+
+            var validIds = VM.Books.Select(b => b.Id).ToHashSet();
+
+            VM.Series.Clear();
+            foreach (var series in seriesList)
+            {
+                series.BookIds ??= new List<Guid>();
+                series.BookIds = series.BookIds.Where(validIds.Contains).ToList();
+                if (series.Id == Guid.Empty)
+                    series.Id = Guid.NewGuid();
+                if (series.BookIds.Count == 0)
+                    continue;
+
+                VM.Series.Add(series);
             }
         }
 
@@ -305,7 +746,7 @@ namespace AudiobookApp
             try
             {
                 var isSameBook = _playback.CurrentBook != null &&
-                    string.Equals(_playback.CurrentBook.FilePath, book.FilePath, StringComparison.OrdinalIgnoreCase);
+                    _playback.CurrentBook.Id == book.Id;
 
                 if (!isSameBook)
                     await _playback.OpenBookAsync(book, autoPlay: false);

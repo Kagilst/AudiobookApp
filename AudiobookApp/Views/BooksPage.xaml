@@ -9,35 +9,80 @@
         <DataTemplate x:Key="BookListTemplate">
             <Grid Padding="10">
                 <Grid.ContextFlyout>
-                    <MenuFlyout>
+                    <MenuFlyout Opening="ItemContextFlyout_Opening">
                         <MenuFlyoutItem Text="Rate"
-                                        Click="RateBook_Click"/>
+                                        Click="RateBook_Click"
+                                        Tag="Rate"/>
                         <MenuFlyoutItem Text="Add tags"
                                         Click="AddTags_Click"/>
+                        <MenuFlyoutItem Text="Add to series..."
+                                        Click="AddToSeries_Click"
+                                        Tag="AddToSeries"/>
+                        <MenuFlyoutItem Text="Create series..."
+                                        Click="CreateSeries_Click"
+                                        Tag="CreateSeries"/>
+                        <MenuFlyoutItem Text="Remove from series"
+                                        Click="RemoveFromSeries_Click"
+                                        Tag="RemoveFromSeries"/>
+                        <MenuFlyoutItem Text="Rename series"
+                                        Click="RenameSeries_Click"
+                                        Tag="RenameSeries"/>
+                        <MenuFlyoutItem Text="Disband series"
+                                        Click="DisbandSeries_Click"
+                                        Tag="DisbandSeries"/>
                         <MenuFlyoutItem Text="Remove"
-                                        Click="RemoveBook_Click"/>
+                                        Click="RemoveBook_Click"
+                                        Tag="RemoveBook"/>
                     </MenuFlyout>
                 </Grid.ContextFlyout>
 
-                <Grid ColumnDefinitions="56,*"
+                <Grid ColumnDefinitions="72,*"
                       ColumnSpacing="14"
                       MinHeight="64">
-                    <Border Width="48"
-                            Height="48"
-                            CornerRadius="4"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1">
-                        <Grid>
-                            <FontIcon Glyph="&#xE8D6;"
-                                      FontSize="20"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"/>
-                            <Image Source="{Binding CoverImage}"
-                                   Stretch="UniformToFill"/>
-                        </Grid>
-                    </Border>
+                    <Grid Width="56" Height="56">
+                        <!-- Series stacked covers -->
+                        <Border Width="44"
+                                Height="44"
+                                CornerRadius="4"
+                                Margin="10,0,0,8"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Visibility="{Binding StackVisibility}">
+                            <Image Source="{Binding CoverImage3}" Stretch="UniformToFill"/>
+                        </Border>
+                        <Border Width="44"
+                                Height="44"
+                                CornerRadius="4"
+                                Margin="5,0,0,4"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Visibility="{Binding MidStackVisibility}">
+                            <Image Source="{Binding CoverImage2}" Stretch="UniformToFill"/>
+                        </Border>
+                        <Border Width="48"
+                                Height="48"
+                                CornerRadius="4"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <Grid>
+                                <FontIcon Glyph="&#xE8D6;"
+                                          FontSize="20"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                                <Image Source="{Binding CoverImage}"
+                                       Stretch="UniformToFill"/>
+                                <ProgressBar Value="{Binding ProgressValue}"
+                                             Maximum="100"
+                                             Height="4"
+                                             VerticalAlignment="Bottom"
+                                             Visibility="{Binding ProgressVisibility}"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <StackPanel Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -45,15 +90,21 @@
                         <TextBlock Text="{Binding Title}"
                                    FontSize="16"
                                    TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding Author}"
+                        <TextBlock Text="{Binding Subtitle}"
                                    Opacity="0.7"
                                    TextTrimming="CharacterEllipsis"/>
                         <local:StarRatingControl Rating="{Binding RatingValue}"
-                                                 StarSize="14"/>
+                                                 StarSize="14"
+                                                 Visibility="{Binding RatingVisibility}"/>
+                        <TextBlock Text="{Binding ProgressText}"
+                                   Opacity="0.65"
+                                   FontSize="12"
+                                   Visibility="{Binding ProgressVisibility}"/>
                         <TextBlock Text="{Binding TagsDisplay}"
                                    Opacity="0.55"
                                    FontSize="12"
-                                   TextTrimming="CharacterEllipsis"/>
+                                   TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding BookVisibility}"/>
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -63,34 +114,100 @@
             <Grid Width="168"
                   Padding="8">
                 <Grid.ContextFlyout>
-                    <MenuFlyout>
+                    <MenuFlyout Opening="ItemContextFlyout_Opening">
                         <MenuFlyoutItem Text="Rate"
-                                        Click="RateBook_Click"/>
+                                        Click="RateBook_Click"
+                                        Tag="Rate"/>
                         <MenuFlyoutItem Text="Add tags"
-                                        Click="AddTags_Click"/>
+                                        Click="AddTags_Click"
+                                        Tag="AddTags"/>
+                        <MenuFlyoutItem Text="Add to series..."
+                                        Click="AddToSeries_Click"
+                                        Tag="AddToSeries"/>
+                        <MenuFlyoutItem Text="Create series..."
+                                        Click="CreateSeries_Click"
+                                        Tag="CreateSeries"/>
+                        <MenuFlyoutItem Text="Remove from series"
+                                        Click="RemoveFromSeries_Click"
+                                        Tag="RemoveFromSeries"/>
+                        <MenuFlyoutItem Text="Rename series"
+                                        Click="RenameSeries_Click"
+                                        Tag="RenameSeries"/>
+                        <MenuFlyoutItem Text="Disband series"
+                                        Click="DisbandSeries_Click"
+                                        Tag="DisbandSeries"/>
                         <MenuFlyoutItem Text="Remove"
-                                        Click="RemoveBook_Click"/>
+                                        Click="RemoveBook_Click"
+                                        Tag="RemoveBook"/>
                     </MenuFlyout>
                 </Grid.ContextFlyout>
 
                 <StackPanel Spacing="8">
-                    <Border Width="140"
-                            Height="140"
-                            CornerRadius="8"
-                            HorizontalAlignment="Center"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1">
-                        <Grid>
-                            <FontIcon Glyph="&#xE8D6;"
-                                      FontSize="38"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"/>
-                            <Image Source="{Binding CoverImage}"
-                                   Stretch="UniformToFill"/>
-                        </Grid>
-                    </Border>
+                    <Grid Width="140"
+                          Height="140"
+                          HorizontalAlignment="Center">
+                        <Border Width="118"
+                                Height="118"
+                                CornerRadius="8"
+                                Margin="18,0,0,14"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Visibility="{Binding StackVisibility}">
+                            <Image Source="{Binding CoverImage3}" Stretch="UniformToFill"/>
+                        </Border>
+                        <Border Width="124"
+                                Height="124"
+                                CornerRadius="8"
+                                Margin="9,0,0,7"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Visibility="{Binding MidStackVisibility}">
+                            <Image Source="{Binding CoverImage2}" Stretch="UniformToFill"/>
+                        </Border>
+                        <Border Width="130"
+                                Height="130"
+                                CornerRadius="8"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <Grid>
+                                <FontIcon Glyph="&#xE8D6;"
+                                          FontSize="38"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                                <Image Source="{Binding CoverImage}"
+                                       Stretch="UniformToFill"/>
+                                <Grid VerticalAlignment="Bottom"
+                                      Visibility="{Binding ProgressVisibility}">
+                                    <Border Background="#99000000"
+                                            Padding="0,10,0,0"/>
+                                    <StackPanel Spacing="2"
+                                                Padding="6,4,6,6"
+                                                VerticalAlignment="Bottom">
+                                        <TextBlock Text="{Binding ProgressText}"
+                                                   Foreground="White"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"/>
+                                        <ProgressBar Value="{Binding ProgressValue}"
+                                                     Maximum="100"
+                                                     Height="4"
+                                                     Foreground="#F5D76E"
+                                                     Background="#55FFFFFF"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <StackPanel Spacing="2">
                         <TextBlock Text="{Binding Title}"
@@ -98,14 +215,15 @@
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
                                    MaxLines="1"/>
-                        <TextBlock Text="{Binding Author}"
+                        <TextBlock Text="{Binding Subtitle}"
                                    Opacity="0.7"
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
                                    MaxLines="2"/>
                         <local:StarRatingControl Rating="{Binding RatingValue}"
                                                  StarSize="12"
-                                                 HorizontalAlignment="Center"/>
+                                                 HorizontalAlignment="Center"
+                                                 Visibility="{Binding RatingVisibility}"/>
                     </StackPanel>
                 </StackPanel>
             </Grid>

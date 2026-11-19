@@ -84,7 +84,7 @@ namespace AudiobookApp.Views
             if (_playback.HasChapters)
             {
                 ChapterText.Visibility = Visibility.Visible;
-                var index = _playback.FindChapterIndex(_playback.Player.PlaybackSession.Position);
+                var index = _playback.FindChapterIndex(_playback.GetAbsolutePosition());
                 UpdateChapterUi(index, force: true);
             }
             else
@@ -129,10 +129,9 @@ namespace AudiobookApp.Views
             if (book == null)
                 return;
 
-            var session = _playback.Player.PlaybackSession;
             var absolute = _isDraggingSlider
                 ? GetAbsolutePositionFromSlider()
-                : session.Position;
+                : _playback.GetAbsolutePosition();
 
             if (_playback.HasChapters)
             {
@@ -162,11 +161,11 @@ namespace AudiobookApp.Views
                 return;
             }
 
-            var total = session.NaturalDuration > TimeSpan.Zero
-                ? session.NaturalDuration
+            var total = _playback.TotalDuration > TimeSpan.Zero
+                ? _playback.TotalDuration
                 : book.Duration;
 
-            if (total <= TimeSpan.Zero && session.NaturalDuration <= TimeSpan.Zero)
+            if (total <= TimeSpan.Zero)
                 return;
 
             _updatingFromTimer = true;
