@@ -62,6 +62,9 @@
                         <SymbolIcon Symbol="Next"/>
                     </Button>
                     <Button Content="Expand" Click="ExpandButton_Click" Padding="10,4"/>
+                    <Button Click="CloseButton_Click" Padding="8,4" ToolTipService.ToolTip="Close mini player">
+                        <SymbolIcon Symbol="Cancel"/>
+                    </Button>
                 </StackPanel>
             </Grid>
 

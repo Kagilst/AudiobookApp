@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using AudiobookApp.Models;
+using AudiobookApp.Services;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 
@@ -48,10 +49,14 @@ namespace AudiobookApp.Views
                 .Select(b => new BookPickItem(b))
                 .ToList();
 
-            TitleText.Text = book.Title;
-            AuthorText.Text = book.IsMultiFileAudiobook
-                ? $"{book.Author} · {book.AudioFilePaths.Count} files"
-                : book.Author;
+            TitleBox.Text = book.Title;
+            AuthorBox.Text = book.Author;
+            if (book.IsMultiFileAudiobook)
+            {
+                FileCountText.Text = $"{book.AudioFilePaths.Count} audio files";
+                FileCountText.Visibility = Visibility.Visible;
+            }
+
             HeaderText.Text = book.MediaType == BookMediaType.Epub
                 ? "Import Epub"
                 : book.IsMultiFileAudiobook
@@ -164,14 +169,33 @@ namespace AudiobookApp.Views
             _selectedTags.Add(tag);
         }
 
+        private async void ChangeCover_Click(object sender, RoutedEventArgs e)
+        {
+            if (AudiobookApp.App.MainWindow == null)
+                return;
+
+            if (Book.Id == Guid.Empty)
+                Book.Id = Guid.NewGuid();
+
+            var path = await CoverImageService.PickAndStoreCoverAsync(
+                AudiobookApp.App.MainWindow,
+                Book.Id);
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            Book.CoverImagePath = path;
+            await LoadCoverAsync();
+        }
+
         private async System.Threading.Tasks.Task LoadCoverAsync()
         {
-            if (string.IsNullOrWhiteSpace(Book.FilePath))
+            var path = Book.EffectiveCoverPath;
+            if (string.IsNullOrWhiteSpace(path))
                 return;
 
             try
             {
-                var file = await StorageFile.GetFileFromPathAsync(Book.FilePath);
+                var file = await StorageFile.GetFileFromPathAsync(path);
                 var thumbnail = await file.GetThumbnailAsync(ThumbnailMode.SingleItem, 240);
 
                 if (thumbnail != null)
@@ -190,6 +214,13 @@ namespace AudiobookApp.Views
 
         private void Import_Click(object sender, RoutedEventArgs e)
         {
+            Book.Title = string.IsNullOrWhiteSpace(TitleBox.Text)
+                ? "Untitled"
+                : TitleBox.Text.Trim();
+            Book.Author = string.IsNullOrWhiteSpace(AuthorBox.Text)
+                ? "Unknown Author"
+                : AuthorBox.Text.Trim();
+
             Book.Tags = _selectedTags
                 .Where(t => !string.IsNullOrWhiteSpace(t))
                 .Distinct(StringComparer.OrdinalIgnoreCase)

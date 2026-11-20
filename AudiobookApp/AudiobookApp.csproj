@@ -23,6 +23,7 @@
     <None Remove="Views\MultiFileSortPage.xaml" />
     <None Remove="Views\DirectoryImportReviewPage.xaml" />
     <None Remove="Views\DirectorySeriesReviewPage.xaml" />
+    <None Remove="Views\SeriesReorderPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -95,6 +96,11 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\DirectorySeriesReviewPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\SeriesReorderPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

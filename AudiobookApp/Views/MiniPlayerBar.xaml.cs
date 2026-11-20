@@ -20,6 +20,7 @@ namespace AudiobookApp.Views
         private int _currentChapterIndex = -1;
 
         public event Action? ExpandRequested;
+        public event Action? CloseRequested;
 
         public MiniPlayerBar()
         {
@@ -82,12 +83,12 @@ namespace AudiobookApp.Views
         private async System.Threading.Tasks.Task LoadCoverAsync()
         {
             var book = _playback?.CurrentBook;
-            if (book == null || string.IsNullOrWhiteSpace(book.FilePath))
+            if (book == null || string.IsNullOrWhiteSpace(book.EffectiveCoverPath))
                 return;
 
             try
             {
-                var file = await StorageFile.GetFileFromPathAsync(book.FilePath);
+                var file = await StorageFile.GetFileFromPathAsync(book.EffectiveCoverPath);
                 var thumbnail = await file.GetThumbnailAsync(ThumbnailMode.SingleItem, 120);
                 if (thumbnail == null)
                     return;
@@ -201,6 +202,8 @@ namespace AudiobookApp.Views
         private void NextButton_Click(object sender, RoutedEventArgs e) => _playback?.NextChapter();
 
         private void ExpandButton_Click(object sender, RoutedEventArgs e) => ExpandRequested?.Invoke();
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 
         private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e) => _isDraggingSlider = true;
 

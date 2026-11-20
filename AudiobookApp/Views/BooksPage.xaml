@@ -12,6 +12,8 @@
                     <MenuFlyout>
                         <MenuFlyoutItem Text="Rate"
                                         Click="SeriesMemberRate_Click"/>
+                        <MenuFlyoutItem Text="Edit"
+                                        Click="SeriesMemberEdit_Click"/>
                         <MenuFlyoutItem Text="Add tags"
                                         Click="SeriesMemberAddTags_Click"/>
                         <MenuFlyoutItem Text="Remove"
@@ -50,12 +52,19 @@
         </DataTemplate>
 
         <DataTemplate x:Key="BookListTemplate">
-            <Grid Padding="10">
-                <Grid.ContextFlyout>
+            <Border Padding="10"
+                    CornerRadius="6"
+                    BorderThickness="{Binding SeriesSelectBorderThickness}"
+                    BorderBrush="{Binding SeriesSelectBorderBrush}"
+                    Background="{Binding SeriesSelectBackground}">
+                <Border.ContextFlyout>
                     <MenuFlyout Opening="ItemContextFlyout_Opening">
                         <MenuFlyoutItem Text="Rate"
                                         Click="RateBook_Click"
                                         Tag="Rate"/>
+                        <MenuFlyoutItem Text="Edit"
+                                        Click="EditBook_Click"
+                                        Tag="EditBook"/>
                         <MenuFlyoutItem Text="Add tags"
                                         Click="AddTags_Click"/>
                         <MenuFlyoutItem Text="Add to series..."
@@ -67,6 +76,9 @@
                         <MenuFlyoutItem Text="Remove from series"
                                         Click="RemoveFromSeries_Click"
                                         Tag="RemoveFromSeries"/>
+                        <MenuFlyoutItem Text="Reorder series..."
+                                        Click="ReorderSeries_Click"
+                                        Tag="ReorderSeries"/>
                         <MenuFlyoutItem Text="Rename series"
                                         Click="RenameSeries_Click"
                                         Tag="RenameSeries"/>
@@ -77,7 +89,7 @@
                                         Click="RemoveBook_Click"
                                         Tag="RemoveBook"/>
                     </MenuFlyout>
-                </Grid.ContextFlyout>
+                </Border.ContextFlyout>
 
                 <Grid ColumnDefinitions="72,*"
                       ColumnSpacing="14"
@@ -150,17 +162,36 @@
                                    Visibility="{Binding BookVisibility}"/>
                     </StackPanel>
                 </Grid>
-            </Grid>
+            </Border>
         </DataTemplate>
 
         <DataTemplate x:Key="BookIconTemplate">
-            <Grid Width="168"
-                  Padding="8">
-                <Grid.ContextFlyout>
+            <Border Width="168"
+                    Padding="8"
+                    CornerRadius="8"
+                    BorderThickness="{Binding SeriesSelectBorderThickness}"
+                    BorderBrush="{Binding SeriesSelectBorderBrush}"
+                    Background="{Binding SeriesSelectBackground}">
+                <ToolTipService.ToolTip>
+                    <ToolTip>
+                        <StackPanel Spacing="2" MaxWidth="280">
+                            <TextBlock Text="{Binding Title}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="WrapWholeWords"/>
+                            <TextBlock Text="{Binding Subtitle}"
+                                       Opacity="0.75"
+                                       TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+                    </ToolTip>
+                </ToolTipService.ToolTip>
+                <Border.ContextFlyout>
                     <MenuFlyout Opening="ItemContextFlyout_Opening">
                         <MenuFlyoutItem Text="Rate"
                                         Click="RateBook_Click"
                                         Tag="Rate"/>
+                        <MenuFlyoutItem Text="Edit"
+                                        Click="EditBook_Click"
+                                        Tag="EditBook"/>
                         <MenuFlyoutItem Text="Add tags"
                                         Click="AddTags_Click"
                                         Tag="AddTags"/>
@@ -173,6 +204,9 @@
                         <MenuFlyoutItem Text="Remove from series"
                                         Click="RemoveFromSeries_Click"
                                         Tag="RemoveFromSeries"/>
+                        <MenuFlyoutItem Text="Reorder series..."
+                                        Click="ReorderSeries_Click"
+                                        Tag="ReorderSeries"/>
                         <MenuFlyoutItem Text="Rename series"
                                         Click="RenameSeries_Click"
                                         Tag="RenameSeries"/>
@@ -183,7 +217,7 @@
                                         Click="RemoveBook_Click"
                                         Tag="RemoveBook"/>
                     </MenuFlyout>
-                </Grid.ContextFlyout>
+                </Border.ContextFlyout>
 
                 <StackPanel Spacing="8">
                     <Grid Width="140"
@@ -257,6 +291,7 @@
                                    FontWeight="SemiBold"
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
                                    MaxLines="1"/>
                         <TextBlock Text="{Binding Subtitle}"
                                    Opacity="0.7"
@@ -269,7 +304,7 @@
                                                  Visibility="{Binding RatingVisibility}"/>
                     </StackPanel>
                 </StackPanel>
-            </Grid>
+            </Border>
         </DataTemplate>
     </Page.Resources>
 
@@ -355,6 +390,18 @@
                                               HorizontalContentAlignment="Left"
                                               Click="ProgressFilter_Click"/>
 
+                                <ToggleButton x:Name="SeriesFilterButton"
+                                              Content="Series only"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Click="LibraryTypeFilter_Click"/>
+
+                                <ToggleButton x:Name="SinglesFilterButton"
+                                              Content="Singles only"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Click="LibraryTypeFilter_Click"/>
+
                                 <Button Content="Clear filters"
                                         Click="ClearFilters_Click"
                                         HorizontalAlignment="Stretch"
@@ -370,8 +417,7 @@
                         Spacing="8"
                         HorizontalAlignment="Right">
                 <ToggleButton x:Name="ListViewButton"
-                              Click="ListViewButton_Click"
-                              IsChecked="True">
+                              Click="ListViewButton_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8FD;" FontSize="14"/>
                         <TextBlock Text="List"/>
@@ -379,7 +425,8 @@
                 </ToggleButton>
 
                 <ToggleButton x:Name="IconViewButton"
-                              Click="IconViewButton_Click">
+                              Click="IconViewButton_Click"
+                              IsChecked="True">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8A9;" FontSize="14"/>
                         <TextBlock Text="Large icons"/>
@@ -388,20 +435,53 @@
             </StackPanel>
         </Grid>
 
-        <TextBlock x:Name="ActiveFiltersText"
-                   Grid.Row="1"
-                   Opacity="0.7"
-                   Visibility="Collapsed"/>
+        <StackPanel Grid.Row="1" Spacing="8">
+            <TextBlock x:Name="ActiveFiltersText"
+                       Opacity="0.7"
+                       Visibility="Collapsed"/>
+
+            <Border x:Name="SeriesSelectBar"
+                    Padding="12,10"
+                    CornerRadius="8"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="Create series"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Name="SeriesSelectStatusText"
+                                   Opacity="0.75"
+                                   TextWrapping="WrapWholeWords"
+                                   Text="Click books to add them to the series."/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <Button Content="Cancel"
+                                Click="CancelSeriesSelect_Click"
+                                MinWidth="100"/>
+                        <Button x:Name="ConfirmSeriesSelectButton"
+                                Content="Confirm"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="ConfirmSeriesSelect_Click"
+                                MinWidth="110"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <Grid Grid.Row="2">
             <ListView x:Name="BooksList"
                       ItemTemplate="{StaticResource BookListTemplate}"
+                      Visibility="Collapsed"
                       IsItemClickEnabled="True"
                       ItemClick="BooksList_ItemClick"/>
 
             <GridView x:Name="BooksGrid"
                       ItemTemplate="{StaticResource BookIconTemplate}"
-                      Visibility="Collapsed"
                       SelectionMode="Single"
                       IsItemClickEnabled="True"
                       ItemClick="BooksGrid_ItemClick">

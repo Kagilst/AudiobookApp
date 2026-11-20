@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -12,6 +13,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using AudiobookApp.Models;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
+using Windows.UI;
 
 namespace AudiobookApp.Views
 {
@@ -32,16 +34,23 @@ namespace AudiobookApp.Views
         private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _availableTags = new();
         private ProgressFilter _progressFilter = ProgressFilter.None;
+        private enum LibraryTypeFilter { All, SeriesOnly, SinglesOnly }
+        private LibraryTypeFilter _libraryTypeFilter = LibraryTypeFilter.All;
         private bool _suppressFilterEvents;
 
         private IReadOnlyList<Series> _allSeries = Array.Empty<Series>();
         private IReadOnlyList<Book> _allBooks = Array.Empty<Book>();
+
+        private bool _seriesSelectMode;
+        private Book? _seriesSelectSeed;
+        private readonly HashSet<Guid> _seriesSelectIds = new();
 
         public BooksPage()
         {
             InitializeComponent();
             BooksList.ItemsSource = _displayItems;
             BooksGrid.ItemsSource = _displayItems;
+            SetDisplayMode(useIconView: true);
         }
 
         public event EventHandler? ImportRequested;
@@ -53,15 +62,22 @@ namespace AudiobookApp.Views
         public event Action? SeriesChanged;
         public event Action<Book, Series>? AddBookToSeriesRequested;
         public event Action<Book, string, IReadOnlyList<Book>>? CreateSeriesRequested;
+        public event Action<Book, IReadOnlyList<Book>>? CreateSeriesFlowRequested;
         public event Action<Book>? RemoveBookFromSeriesRequested;
         public event Action<Series, string>? RenameSeriesRequested;
         public event Action<Series>? DisbandSeriesRequested;
+        public event Action<Series, IReadOnlyList<Book>>? ReorderSeriesRequested;
+        public event Action<Book>? BookEdited;
 
         public string SearchText => SearchBox.Text?.Trim() ?? "";
 
         public IReadOnlyCollection<string> SelectedTags => _selectedTags.ToList();
 
         public ProgressFilter ProgressFilter => _progressFilter;
+
+        public bool SeriesOnlyFilter => _libraryTypeFilter == LibraryTypeFilter.SeriesOnly;
+
+        public bool SinglesOnlyFilter => _libraryTypeFilter == LibraryTypeFilter.SinglesOnly;
 
         private void ImportButton_Click(object sender, RoutedEventArgs e)
         {
@@ -125,10 +141,45 @@ namespace AudiobookApp.Views
             FilterChanged?.Invoke();
         }
 
+        private void LibraryTypeFilter_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not ToggleButton clicked)
+                return;
+
+            if (clicked == SeriesFilterButton)
+            {
+                if (SeriesFilterButton.IsChecked == true)
+                {
+                    SinglesFilterButton.IsChecked = false;
+                    _libraryTypeFilter = LibraryTypeFilter.SeriesOnly;
+                }
+                else
+                {
+                    _libraryTypeFilter = LibraryTypeFilter.All;
+                }
+            }
+            else if (clicked == SinglesFilterButton)
+            {
+                if (SinglesFilterButton.IsChecked == true)
+                {
+                    SeriesFilterButton.IsChecked = false;
+                    _libraryTypeFilter = LibraryTypeFilter.SinglesOnly;
+                }
+                else
+                {
+                    _libraryTypeFilter = LibraryTypeFilter.All;
+                }
+            }
+
+            UpdateFilterUi();
+            FilterChanged?.Invoke();
+        }
+
         private void ClearFilters_Click(object sender, RoutedEventArgs e)
         {
             _selectedTags.Clear();
             _progressFilter = ProgressFilter.None;
+            _libraryTypeFilter = LibraryTypeFilter.All;
 
             _suppressFilterEvents = true;
             TagFilterList.SelectedItems.Clear();
@@ -137,6 +188,8 @@ namespace AudiobookApp.Views
             StartedFilterButton.IsChecked = false;
             NotStartedFilterButton.IsChecked = false;
             CompletedFilterButton.IsChecked = false;
+            SeriesFilterButton.IsChecked = false;
+            SinglesFilterButton.IsChecked = false;
 
             UpdateFilterUi();
             TagFlyout.Hide();
@@ -170,7 +223,9 @@ namespace AudiobookApp.Views
 
         private void UpdateFilterUi()
         {
-            var activeCount = _selectedTags.Count + (_progressFilter != ProgressFilter.None ? 1 : 0);
+            var activeCount = _selectedTags.Count
+                + (_progressFilter != ProgressFilter.None ? 1 : 0)
+                + (_libraryTypeFilter != LibraryTypeFilter.All ? 1 : 0);
             FilterButtonText.Text = activeCount > 0 ? $"Filter ({activeCount})" : "Filter";
 
             TagFilterButton.Content = _selectedTags.Count > 0
@@ -181,6 +236,11 @@ namespace AudiobookApp.Views
 
             if (_selectedTags.Count > 0)
                 parts.Add("Tags: " + string.Join(", ", _selectedTags.OrderBy(t => t)));
+
+            if (_libraryTypeFilter == LibraryTypeFilter.SeriesOnly)
+                parts.Add("Series only");
+            else if (_libraryTypeFilter == LibraryTypeFilter.SinglesOnly)
+                parts.Add("Singles only");
 
             if (_progressFilter != ProgressFilter.None)
             {
@@ -216,9 +276,20 @@ namespace AudiobookApp.Views
             _displayItems.Clear();
 
             foreach (var item in items)
-                _displayItems.Add(new LibraryDisplayItem(item));
+            {
+                var display = new LibraryDisplayItem(item);
+                if (_seriesSelectMode &&
+                    display.Book != null &&
+                    _seriesSelectIds.Contains(display.Book.Id))
+                {
+                    display.IsSelectedForSeries = true;
+                }
+
+                _displayItems.Add(display);
+            }
 
             _ = LoadCoversAsync(_displayItems.ToList());
+            UpdateSeriesSelectUi();
         }
 
         private async void BooksList_ItemClick(object sender, ItemClickEventArgs e)
@@ -235,6 +306,12 @@ namespace AudiobookApp.Views
 
         private async Task HandleItemClickAsync(LibraryDisplayItem item)
         {
+            if (_seriesSelectMode)
+            {
+                ToggleSeriesSelect(item);
+                return;
+            }
+
             if (item.IsSeries)
             {
                 await ShowSeriesBooksDialogAsync(item);
@@ -243,6 +320,96 @@ namespace AudiobookApp.Views
 
             if (item.Book != null)
                 BookSelected?.Invoke(item.Book);
+        }
+
+        private void ToggleSeriesSelect(LibraryDisplayItem item)
+        {
+            if (item.IsSeries || item.Book == null)
+                return;
+
+            // Keep the seed book always selected.
+            if (_seriesSelectSeed != null && item.Book.Id == _seriesSelectSeed.Id)
+                return;
+
+            // Only books that are not already in a series can be added.
+            if (FindSeriesForBook(item.Book) != null)
+                return;
+
+            if (_seriesSelectIds.Contains(item.Book.Id))
+            {
+                _seriesSelectIds.Remove(item.Book.Id);
+                item.IsSelectedForSeries = false;
+            }
+            else
+            {
+                _seriesSelectIds.Add(item.Book.Id);
+                item.IsSelectedForSeries = true;
+            }
+
+            UpdateSeriesSelectUi();
+        }
+
+        private void EnterSeriesSelectMode(Book seed)
+        {
+            _seriesSelectMode = true;
+            _seriesSelectSeed = seed;
+            _seriesSelectIds.Clear();
+            _seriesSelectIds.Add(seed.Id);
+
+            foreach (var item in _displayItems)
+            {
+                item.IsSelectedForSeries =
+                    item.Book != null && _seriesSelectIds.Contains(item.Book.Id);
+            }
+
+            UpdateSeriesSelectUi();
+        }
+
+        private void ExitSeriesSelectMode()
+        {
+            _seriesSelectMode = false;
+            _seriesSelectSeed = null;
+            _seriesSelectIds.Clear();
+
+            foreach (var item in _displayItems)
+                item.IsSelectedForSeries = false;
+
+            UpdateSeriesSelectUi();
+        }
+
+        private void UpdateSeriesSelectUi()
+        {
+            if (SeriesSelectBar == null)
+                return;
+
+            SeriesSelectBar.Visibility = _seriesSelectMode ? Visibility.Visible : Visibility.Collapsed;
+            if (!_seriesSelectMode)
+                return;
+
+            var count = _seriesSelectIds.Count;
+            SeriesSelectStatusText.Text = count < 2
+                ? $"{count} book selected. Click at least one more book, then confirm."
+                : $"{count} books selected. Click books to add or remove them, then confirm.";
+            ConfirmSeriesSelectButton.IsEnabled = count >= 2;
+        }
+
+        private void CancelSeriesSelect_Click(object sender, RoutedEventArgs e)
+        {
+            ExitSeriesSelectMode();
+        }
+
+        private void ConfirmSeriesSelect_Click(object sender, RoutedEventArgs e)
+        {
+            if (_seriesSelectSeed == null || _seriesSelectIds.Count < 2)
+                return;
+
+            var seed = _seriesSelectSeed;
+            var extra = _allBooks
+                .Where(b => _seriesSelectIds.Contains(b.Id) && b.Id != seed.Id)
+                .ToList();
+
+            ExitSeriesSelectMode();
+            CreateSeriesFlowRequested?.Invoke(seed, extra);
         }
 
         private ContentDialog? _activeSeriesDialog;
@@ -357,13 +524,54 @@ namespace AudiobookApp.Views
                 await ReopenSeriesDialogAsync(series);
         }
 
-        private void SeriesMemberRemove_Click(object sender, RoutedEventArgs e)
+        private async void SeriesMemberEdit_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not SeriesMemberRow row)
                 return;
 
+            var book = row.Book;
+            var series = FindSeriesForBook(book);
             _activeSeriesDialog?.Hide();
-            RemoveRequested?.Invoke(row.Book);
+
+            await ShowEditBookDialogAsync(book);
+
+            if (series != null)
+                await ReopenSeriesDialogAsync(series);
+        }
+
+        private async void SeriesMemberRemove_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SeriesMemberRow row)
+                return;
+
+            var book = row.Book;
+            var series = FindSeriesForBook(book);
+            _activeSeriesDialog?.Hide();
+
+            var choice = await new ContentDialog
+            {
+                Title = "Remove book",
+                Content = $"How do you want to remove \"{book.Title}\"?",
+                PrimaryButtonText = "Remove from series",
+                SecondaryButtonText = "Remove from library",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot
+            }.ShowAsync();
+
+            if (choice == ContentDialogResult.Primary)
+            {
+                RemoveBookFromSeriesRequested?.Invoke(book);
+                if (series != null)
+                    await ReopenSeriesDialogAsync(series);
+            }
+            else if (choice == ContentDialogResult.Secondary)
+            {
+                RemoveRequested?.Invoke(book);
+            }
+            else if (series != null)
+            {
+                await ReopenSeriesDialogAsync(series);
+            }
         }
 
         private async Task ReopenSeriesDialogAsync(Series series)
@@ -411,7 +619,7 @@ namespace AudiobookApp.Views
 
                 if (item.IsSeries)
                 {
-                    menuItem.Visibility = tag is "RenameSeries" or "DisbandSeries"
+                    menuItem.Visibility = tag is "RenameSeries" or "DisbandSeries" or "ReorderSeries"
                         ? Visibility.Visible
                         : Visibility.Collapsed;
                 }
@@ -420,17 +628,17 @@ namespace AudiobookApp.Views
                     var inSeries = FindSeriesForBook(item.Book) != null;
                     menuItem.Visibility = tag switch
                     {
-                        "RenameSeries" or "DisbandSeries" => Visibility.Collapsed,
+                        "RenameSeries" or "DisbandSeries" or "ReorderSeries" => Visibility.Collapsed,
                         "RemoveFromSeries" => inSeries ? Visibility.Visible : Visibility.Collapsed,
                         "AddToSeries" => !inSeries && _allSeries.Count > 0 ? Visibility.Visible : Visibility.Collapsed,
                         "CreateSeries" => Visibility.Visible,
-                        "RemoveBook" or "Rate" or "AddTags" or "Add tags" or "Rate" => Visibility.Visible,
+                        "EditBook" or "RemoveBook" or "Rate" or "AddTags" => Visibility.Visible,
                         _ => Visibility.Visible
                     };
 
-                    // Rate / Add tags always for books
                     if (string.Equals(menuItem.Text, "Rate", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(menuItem.Text, "Add tags", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(menuItem.Text, "Edit", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(menuItem.Text, "Remove", StringComparison.OrdinalIgnoreCase))
                     {
                         menuItem.Visibility = Visibility.Visible;
@@ -453,6 +661,154 @@ namespace AudiobookApp.Views
                 item.Book != null)
             {
                 RemoveRequested?.Invoke(item.Book);
+            }
+        }
+
+        private async void EditBook_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Book == null)
+                return;
+
+            await ShowEditBookDialogAsync(item.Book);
+        }
+
+        private async Task ShowEditBookDialogAsync(Book book)
+        {
+            if (book.Id == Guid.Empty)
+                book.Id = Guid.NewGuid();
+
+            var title = book.Title;
+            var author = book.Author;
+
+            while (true)
+            {
+                var titleBox = new TextBox
+                {
+                    Header = "Title",
+                    Text = title
+                };
+
+                var authorBox = new TextBox
+                {
+                    Header = "Author",
+                    Text = author
+                };
+
+                var coverImage = new Image
+                {
+                    Stretch = Stretch.UniformToFill,
+                    Width = 140,
+                    Height = 140
+                };
+
+                var coverPlaceholder = new FontIcon
+                {
+                    Glyph = "\uE8D6",
+                    FontSize = 36,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                var coverGrid = new Grid
+                {
+                    Width = 140,
+                    Height = 140,
+                    Children = { coverPlaceholder, coverImage }
+                };
+
+                var coverBorder = new Border
+                {
+                    Width = 140,
+                    Height = 140,
+                    CornerRadius = new CornerRadius(8),
+                    Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                    BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                    BorderThickness = new Thickness(1),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Child = coverGrid
+                };
+
+                async Task RefreshCoverPreviewAsync()
+                {
+                    try
+                    {
+                        var source = await LoadThumbnailAsync(book.EffectiveCoverPath);
+                        coverImage.Source = source;
+                        coverPlaceholder.Visibility = source == null ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                    catch
+                    {
+                        coverImage.Source = null;
+                        coverPlaceholder.Visibility = Visibility.Visible;
+                    }
+                }
+
+                await RefreshCoverPreviewAsync();
+
+                var changeCoverRequested = false;
+                ContentDialog? dialog = null;
+
+                var changeCoverButton = new Button
+                {
+                    Content = "Change cover image",
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 8, 0, 0)
+                };
+
+                changeCoverButton.Click += (_, _) =>
+                {
+                    changeCoverRequested = true;
+                    dialog?.Hide();
+                };
+
+                var content = new StackPanel
+                {
+                    Spacing = 12,
+                    Width = 320,
+                    Children =
+                    {
+                        coverBorder,
+                        changeCoverButton,
+                        titleBox,
+                        authorBox
+                    }
+                };
+
+                dialog = new ContentDialog
+                {
+                    Title = "Edit book",
+                    Content = content,
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel",
+                    XamlRoot = XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                title = titleBox.Text ?? title;
+                author = authorBox.Text ?? author;
+
+                if (changeCoverRequested)
+                {
+                    if (AudiobookApp.App.MainWindow != null)
+                    {
+                        var path = await Services.CoverImageService.PickAndStoreCoverAsync(
+                            AudiobookApp.App.MainWindow,
+                            book.Id);
+                        if (!string.IsNullOrWhiteSpace(path))
+                            book.CoverImagePath = path;
+                    }
+
+                    continue;
+                }
+
+                if (result != ContentDialogResult.Primary)
+                    return;
+
+                book.Title = string.IsNullOrWhiteSpace(title) ? book.Title : title.Trim();
+                book.Author = string.IsNullOrWhiteSpace(author) ? book.Author : author.Trim();
+                BookEdited?.Invoke(book);
+                return;
             }
         }
 
@@ -522,61 +878,13 @@ namespace AudiobookApp.Views
             AddBookToSeriesRequested?.Invoke(item.Book, series);
         }
 
-        private async void CreateSeries_Click(object sender, RoutedEventArgs e)
+        private void CreateSeries_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
                 item.Book == null)
                 return;
 
-            var nameBox = new TextBox
-            {
-                Header = "Series name",
-                PlaceholderText = "e.g. Classroom of the Elite"
-            };
-
-            var candidates = _allBooks
-                .Where(b => b.Id != item.Book.Id && FindSeriesForBook(b) == null)
-                .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            var picker = new ListView
-            {
-                Header = "Also include (optional)",
-                SelectionMode = ListViewSelectionMode.Multiple,
-                Height = 220,
-                ItemsSource = candidates.Select(b => new BookPickRow(b)).ToList()
-            };
-            picker.ItemTemplate = CreateBookPickTemplate();
-
-            var content = new StackPanel
-            {
-                Spacing = 12,
-                Width = 360,
-                Children = { nameBox, picker }
-            };
-
-            var dialog = new ContentDialog
-            {
-                Title = "Create series",
-                Content = content,
-                PrimaryButtonText = "Create",
-                CloseButtonText = "Cancel",
-                XamlRoot = XamlRoot
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-                return;
-
-            var name = nameBox.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                return;
-
-            var extra = picker.SelectedItems
-                .OfType<BookPickRow>()
-                .Select(r => r.Book)
-                .ToList();
-
-            CreateSeriesRequested?.Invoke(item.Book, name, extra);
+            EnterSeriesSelectMode(item.Book);
         }
 
         private void RemoveFromSeries_Click(object sender, RoutedEventArgs e)
@@ -586,6 +894,16 @@ namespace AudiobookApp.Views
             {
                 RemoveBookFromSeriesRequested?.Invoke(item.Book);
             }
+        }
+
+        private void ReorderSeries_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not LibraryDisplayItem item ||
+                item.Series == null ||
+                item.Members.Count == 0)
+                return;
+
+            ReorderSeriesRequested?.Invoke(item.Series, item.Members.ToList());
         }
 
         private async void RenameSeries_Click(object sender, RoutedEventArgs e)
@@ -627,18 +945,6 @@ namespace AudiobookApp.Views
             {
                 DisbandSeriesRequested?.Invoke(item.Series);
             }
-        }
-
-        private static DataTemplate CreateBookPickTemplate()
-        {
-            var xaml =
-                @"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
-                    <StackPanel Padding='4'>
-                        <TextBlock Text='{Binding Title}' TextTrimming='CharacterEllipsis'/>
-                        <TextBlock Text='{Binding Author}' Opacity='0.7' FontSize='12' TextTrimming='CharacterEllipsis'/>
-                    </StackPanel>
-                  </DataTemplate>";
-            return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
         }
 
         private async Task ShowRateBookDialogAsync(Book book, Action onSaved)
@@ -884,7 +1190,7 @@ namespace AudiobookApp.Views
             {
                 try
                 {
-                    row.CoverImage = await LoadThumbnailAsync(row.Book.FilePath);
+                    row.CoverImage = await LoadThumbnailAsync(row.Book.EffectiveCoverPath);
                 }
                 catch
                 {
@@ -905,14 +1211,6 @@ namespace AudiobookApp.Views
             var bitmap = new BitmapImage();
             await bitmap.SetSourceAsync(thumbnail);
             return bitmap;
-        }
-
-        private sealed class BookPickRow
-        {
-            public BookPickRow(Book book) => Book = book;
-            public Book Book { get; }
-            public string Title => Book.Title;
-            public string Author => Book.Author;
         }
 
         private sealed class SeriesMemberRow : INotifyPropertyChanged
@@ -949,9 +1247,17 @@ namespace AudiobookApp.Views
 
         private sealed class LibraryDisplayItem : INotifyPropertyChanged
         {
+            private static readonly SolidColorBrush SelectedBorderBrush =
+                new(Color.FromArgb(255, 0, 120, 212));
+            private static readonly SolidColorBrush SelectedBackgroundBrush =
+                new(Color.FromArgb(40, 0, 120, 212));
+            private static readonly SolidColorBrush TransparentBrush =
+                new(Colors.Transparent);
+
             private ImageSource? _coverImage;
             private ImageSource? _coverImage2;
             private ImageSource? _coverImage3;
+            private bool _isSelectedForSeries;
 
             public LibraryDisplayItem(LibraryItem item)
             {
@@ -966,7 +1272,7 @@ namespace AudiobookApp.Views
                     Title = Series.Name;
                     Subtitle = Members.Count == 1 ? "1 book" : $"{Members.Count} books";
                     CoverPaths = Members.Take(3)
-                        .Select(m => m.FilePath)
+                        .Select(m => m.EffectiveCoverPath)
                         .Where(p => !string.IsNullOrWhiteSpace(p))
                         .ToList();
                 }
@@ -974,9 +1280,9 @@ namespace AudiobookApp.Views
                 {
                     Title = Book.Title;
                     Subtitle = Book.Author;
-                    CoverPaths = string.IsNullOrWhiteSpace(Book.FilePath)
+                    CoverPaths = string.IsNullOrWhiteSpace(Book.EffectiveCoverPath)
                         ? new List<string>()
-                        : new List<string> { Book.FilePath };
+                        : new List<string> { Book.EffectiveCoverPath };
                 }
                 else
                 {
@@ -997,6 +1303,31 @@ namespace AudiobookApp.Views
 
             public string Title { get; }
             public string Subtitle { get; }
+
+            public bool IsSelectedForSeries
+            {
+                get => _isSelectedForSeries;
+                set
+                {
+                    if (_isSelectedForSeries == value)
+                        return;
+
+                    _isSelectedForSeries = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelectedForSeries)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SeriesSelectBorderThickness)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SeriesSelectBorderBrush)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SeriesSelectBackground)));
+                }
+            }
+
+            public Thickness SeriesSelectBorderThickness =>
+                IsSelectedForSeries ? new Thickness(3) : new Thickness(0);
+
+            public Brush SeriesSelectBorderBrush =>
+                IsSelectedForSeries ? SelectedBorderBrush : TransparentBrush;
+
+            public Brush SeriesSelectBackground =>
+                IsSelectedForSeries ? SelectedBackgroundBrush : TransparentBrush;
 
             public double RatingValue
             {

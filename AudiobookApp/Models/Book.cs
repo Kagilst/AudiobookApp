@@ -29,6 +29,11 @@ namespace AudiobookApp.Models
         /// </summary>
         public List<string> FilePaths { get; set; } = new();
 
+        /// <summary>
+        /// Optional custom cover image path. When empty, cover art is taken from <see cref="FilePath"/>.
+        /// </summary>
+        public string CoverImagePath { get; set; } = "";
+
         public BookMediaType MediaType { get; set; } = BookMediaType.Audiobook;
 
         public List<string> Tags { get; set; } = new();
@@ -48,6 +53,10 @@ namespace AudiobookApp.Models
         public int LastChapterIndex { get; set; }
 
         public double PlaybackSpeed { get; set; } = 1.0;
+
+        [JsonIgnore]
+        public string EffectiveCoverPath =>
+            !string.IsNullOrWhiteSpace(CoverImagePath) ? CoverImagePath : FilePath;
 
         [JsonIgnore]
         public IReadOnlyList<string> AudioFilePaths

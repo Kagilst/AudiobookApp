@@ -55,6 +55,38 @@ namespace AudiobookApp.Views
             UpdateSummary();
         }
 
+        private void ApplyFilterPreservingScroll()
+        {
+            var scrollViewer = FindDescendantScrollViewer(CandidatesList);
+            var offset = scrollViewer?.VerticalOffset ?? 0;
+
+            ApplyFilter();
+            CandidatesList.UpdateLayout();
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                var restored = FindDescendantScrollViewer(CandidatesList);
+                restored?.ChangeView(null, offset, null, true);
+            });
+        }
+
+        private static ScrollViewer? FindDescendantScrollViewer(DependencyObject root)
+        {
+            if (root is ScrollViewer scrollViewer)
+                return scrollViewer;
+
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                var found = FindDescendantScrollViewer(child);
+                if (found != null)
+                    return found;
+            }
+
+            return null;
+        }
+
         private bool MatchesFilter(CandidateRow row)
         {
             return _filter switch
@@ -152,7 +184,7 @@ namespace AudiobookApp.Views
             foreach (var row in toRemove)
                 _allRows.Remove(row);
 
-            ApplyFilter();
+            ApplyFilterPreservingScroll();
         }
 
         private async void ViewFiles_Click(object sender, RoutedEventArgs e)
@@ -187,7 +219,7 @@ namespace AudiobookApp.Views
                 return;
 
             _allRows.Remove(row);
-            ApplyFilter();
+            ApplyFilterPreservingScroll();
         }
 
         private void MergeSelected_Click(object sender, RoutedEventArgs e)
@@ -242,7 +274,7 @@ namespace AudiobookApp.Views
             else
                 _allRows.Insert(insertAt, mergedRow);
 
-            ApplyFilter();
+            ApplyFilterPreservingScroll();
             _ = LoadCoverAsync(mergedRow);
         }
 
@@ -291,7 +323,7 @@ namespace AudiobookApp.Views
                 }
             }
 
-            ApplyFilter();
+            ApplyFilterPreservingScroll();
             _ = LoadCoversAsync();
         }
 

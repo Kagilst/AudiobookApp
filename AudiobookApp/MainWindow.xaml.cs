@@ -30,6 +30,7 @@ namespace AudiobookApp
         private readonly PlaybackService _playback = new PlaybackService();
         private LibraryTab _currentTab = LibraryTab.FullLibrary;
         private bool _showingFullPlayer;
+        private bool _miniPlayerDismissed;
 
         private readonly string booksPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -50,6 +51,12 @@ namespace AudiobookApp
 
             MiniPlayer.Attach(_playback);
             MiniPlayer.ExpandRequested += ShowFullPlayer;
+            MiniPlayer.CloseRequested += () =>
+            {
+                _miniPlayerDismissed = true;
+                _playback.Pause();
+                UpdateMiniPlayerVisibility();
+            };
 
             _playback.PlaybackPersisted += _ => SaveBooks();
             _playback.StateChanged += () =>
@@ -75,9 +82,16 @@ namespace AudiobookApp
 
             _booksPage.AddBookToSeriesRequested += AddBookToSeries;
             _booksPage.CreateSeriesRequested += CreateSeriesFromBook;
+            _booksPage.CreateSeriesFlowRequested += StartCreateSeriesFlow;
             _booksPage.RemoveBookFromSeriesRequested += RemoveBookFromSeries;
             _booksPage.RenameSeriesRequested += RenameSeries;
             _booksPage.DisbandSeriesRequested += DisbandSeries;
+            _booksPage.ReorderSeriesRequested += ShowReorderSeries;
+            _booksPage.BookEdited += _ =>
+            {
+                SaveBooks();
+                RefreshCurrentView();
+            };
 
             ShowTab(LibraryTab.FullLibrary);
         }
@@ -181,65 +195,79 @@ namespace AudiobookApp
             var items = new List<LibraryItem>();
             var includedBookIds = new HashSet<Guid>();
 
-            foreach (var series in VM.Series.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
+            if (!_booksPage.SinglesOnlyFilter)
             {
-                var members = series.BookIds
-                    .Where(id => booksById.ContainsKey(id))
-                    .Select(id => booksById[id])
-                    .ToList();
-
-                if (members.Count == 0)
-                    continue;
-
-                var visibleMembers = members.Where(MatchesBookFilters).ToList();
-
-                var search = _booksPage.SearchText;
-                var seriesNameMatches = !string.IsNullOrWhiteSpace(search) &&
-                    series.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
-
-                if (visibleMembers.Count == 0 && !seriesNameMatches)
-                    continue;
-
-                // If only the series name matched search, still show members that pass tab/tag/progress.
-                if (visibleMembers.Count == 0 && seriesNameMatches)
+                foreach (var series in VM.Series)
                 {
-                    visibleMembers = members
-                        .Where(b => MatchesTab(b) && MatchesTags(b) && MatchesProgress(b))
+                    var members = series.BookIds
+                        .Where(id => booksById.ContainsKey(id))
+                        .Select(id => booksById[id])
                         .ToList();
+
+                    if (members.Count == 0)
+                        continue;
+
+                    var visibleMembers = members.Where(MatchesBookFilters).ToList();
+
+                    var search = _booksPage.SearchText;
+                    var seriesNameMatches = !string.IsNullOrWhiteSpace(search) &&
+                        series.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+                    if (visibleMembers.Count == 0 && !seriesNameMatches)
+                        continue;
+
+                    // If only the series name matched search, still show members that pass tab/tag/progress.
+                    if (visibleMembers.Count == 0 && seriesNameMatches)
+                    {
+                        visibleMembers = members
+                            .Where(b => MatchesTab(b) && MatchesTags(b) && MatchesProgress(b))
+                            .ToList();
+                    }
+
+                    if (visibleMembers.Count == 0)
+                        continue;
+
+                    // Keep series order for covers/detail, but only include filter-matching members in the popup.
+                    var orderedVisible = series.BookIds
+                        .Where(id => visibleMembers.Any(m => m.Id == id))
+                        .Select(id => booksById[id])
+                        .ToList();
+
+                    items.Add(new LibraryItem
+                    {
+                        IsSeries = true,
+                        Series = series,
+                        Members = orderedVisible
+                    });
+
+                    foreach (var member in members)
+                        includedBookIds.Add(member.Id);
                 }
-
-                if (visibleMembers.Count == 0)
-                    continue;
-
-                // Keep series order for covers/detail, but only include filter-matching members in the popup.
-                var orderedVisible = series.BookIds
-                    .Where(id => visibleMembers.Any(m => m.Id == id))
-                    .Select(id => booksById[id])
-                    .ToList();
-
-                items.Add(new LibraryItem
-                {
-                    IsSeries = true,
-                    Series = series,
-                    Members = orderedVisible
-                });
-
-                foreach (var member in members)
-                    includedBookIds.Add(member.Id);
             }
 
-            foreach (var book in VM.Books
-                         .Where(b => !includedBookIds.Contains(b.Id))
-                         .Where(MatchesBookFilters)
-                         .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase))
+            if (!_booksPage.SeriesOnlyFilter)
             {
-                items.Add(new LibraryItem
+                foreach (var book in VM.Books
+                             .Where(b => !includedBookIds.Contains(b.Id))
+                             .Where(MatchesBookFilters))
                 {
-                    IsSeries = false,
-                    Book = book,
-                    Members = new[] { book }
-                });
+                    items.Add(new LibraryItem
+                    {
+                        IsSeries = false,
+                        Book = book,
+                        Members = new[] { book }
+                    });
+                }
             }
+
+            // Sort series and singles together by display name.
+            items = items
+                .OrderBy(
+                    i => i.IsSeries
+                        ? (i.Series?.Name ?? "")
+                        : (i.Book?.Title ?? ""),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             _booksPage.SetAvailableTags(GetAllTags());
             _booksPage.SetLibraryContext(VM.Books, VM.Series);
@@ -251,7 +279,7 @@ namespace AudiobookApp
 
         private void UpdateMiniPlayerVisibility()
         {
-            MiniPlayer.Visibility = _playback.HasSession && !_showingFullPlayer
+            MiniPlayer.Visibility = _playback.HasSession && !_showingFullPlayer && !_miniPlayerDismissed
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
@@ -297,22 +325,99 @@ namespace AudiobookApp
 
         private void CreateSeriesFromBook(Book book, string name, IReadOnlyList<Book> additional)
         {
-            RemoveBookFromAllSeries(book.Id);
-            foreach (var extra in additional)
-                RemoveBookFromAllSeries(extra.Id);
+            var ordered = new List<Book> { book };
+            ordered.AddRange(additional.Where(b => b.Id != book.Id));
+            CreateSeriesFromOrderedBooks(ordered, name);
+        }
+
+        private void StartCreateSeriesFlow(Book seed, IReadOnlyList<Book> additional)
+        {
+            var members = new List<Book> { seed };
+            members.AddRange(additional.Where(b => b.Id != seed.Id));
+            if (members.Count < 2)
+                return;
+
+            ShowCreateSeriesReorder(seed, members);
+        }
+
+        private void ShowCreateSeriesReorder(Book seed, IReadOnlyList<Book> members)
+        {
+            var draft = new Series
+            {
+                Name = seed.Title,
+                BookIds = members.Select(m => m.Id).ToList()
+            };
+
+            var page = new SeriesReorderPage(draft, members);
+            page.SetContinueMode(true);
+            page.CancelRequested += () => ShowTab(_currentTab);
+            page.OrderConfirmed += (reorderedSeries, orderedIds) =>
+                _ = FinishCreateSeriesAfterReorderAsync(seed, orderedIds);
+
+            _showingFullPlayer = false;
+            ContentFrame.Content = page;
+            UpdateMiniPlayerVisibility();
+        }
+
+        private async Task FinishCreateSeriesAfterReorderAsync(Book seed, IReadOnlyList<Guid> orderedIds)
+        {
+            var orderedBooks = orderedIds
+                .Select(id => VM.Books.FirstOrDefault(b => b.Id == id))
+                .Where(b => b != null)
+                .Cast<Book>()
+                .ToList();
+
+            if (orderedBooks.Count < 2)
+            {
+                ShowTab(_currentTab);
+                return;
+            }
+
+            var nameBox = new TextBox
+            {
+                Header = "Series name",
+                PlaceholderText = "e.g. Classroom of the Elite",
+                Text = seed.Title
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "Name series",
+                Content = nameBox,
+                PrimaryButtonText = "Create",
+                CloseButtonText = "Cancel",
+                XamlRoot = Content.XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                // Return to reorder instead of abandoning series creation.
+                ShowCreateSeriesReorder(seed, orderedBooks);
+                return;
+            }
+
+            var name = nameBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                ShowCreateSeriesReorder(seed, orderedBooks);
+                return;
+            }
+
+            CreateSeriesFromOrderedBooks(orderedBooks, name);
+            ShowTab(_currentTab);
+        }
+
+        private void CreateSeriesFromOrderedBooks(IReadOnlyList<Book> orderedBooks, string name)
+        {
+            foreach (var book in orderedBooks)
+                RemoveBookFromAllSeries(book.Id);
 
             var series = new Series
             {
                 Id = Guid.NewGuid(),
-                Name = name.Trim()
+                Name = name.Trim(),
+                BookIds = orderedBooks.Select(b => b.Id).Distinct().ToList()
             };
-
-            series.BookIds.Add(book.Id);
-            foreach (var extra in additional)
-            {
-                if (!series.BookIds.Contains(extra.Id))
-                    series.BookIds.Add(extra.Id);
-            }
 
             VM.Series.Add(series);
             SaveSeries();
@@ -346,6 +451,31 @@ namespace AudiobookApp
             VM.Series.Remove(target);
             SaveSeries();
             RefreshCurrentView();
+        }
+
+        private void ShowReorderSeries(Series series, IReadOnlyList<Book> members)
+        {
+            if (members.Count == 0)
+                return;
+
+            var page = new SeriesReorderPage(series, members);
+            page.SetContinueMode(false);
+            page.CancelRequested += () => ShowTab(_currentTab);
+            page.OrderConfirmed += (reorderedSeries, orderedIds) =>
+            {
+                var target = VM.Series.FirstOrDefault(s => s.Id == reorderedSeries.Id);
+                if (target != null)
+                {
+                    target.BookIds = orderedIds.ToList();
+                    SaveSeries();
+                }
+
+                ShowTab(_currentTab);
+            };
+
+            _showingFullPlayer = false;
+            ContentFrame.Content = page;
+            UpdateMiniPlayerVisibility();
         }
 
         private void RemoveBookFromAllSeries(Guid bookId)
@@ -1024,6 +1154,8 @@ namespace AudiobookApp
 
         private async void OpenBook(Book book)
         {
+            _miniPlayerDismissed = false;
+
             if (book.MediaType == BookMediaType.Epub)
             {
                 ShowEpubReader(book);
@@ -1080,6 +1212,8 @@ namespace AudiobookApp
         {
             if (_playback.CurrentBook == null)
                 return;
+
+            _miniPlayerDismissed = false;
 
             try
             {

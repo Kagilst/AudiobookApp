@@ -42,19 +42,22 @@
                     </Grid>
                 </Border>
 
-                <TextBlock x:Name="TitleText"
-                           FontSize="18"
-                           FontWeight="SemiBold"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"
-                           HorizontalAlignment="Center"/>
+                <Button Content="Change cover image"
+                        Click="ChangeCover_Click"
+                        HorizontalAlignment="Center"/>
 
-                <TextBlock x:Name="AuthorText"
-                           FontSize="14"
-                           Opacity="0.7"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"
-                           HorizontalAlignment="Center"/>
+                <StackPanel Spacing="8"
+                            Width="320"
+                            HorizontalAlignment="Center">
+                    <TextBox x:Name="TitleBox"
+                             Header="Title"/>
+                    <TextBox x:Name="AuthorBox"
+                             Header="Author"/>
+                    <TextBlock x:Name="FileCountText"
+                               Opacity="0.65"
+                               FontSize="12"
+                               Visibility="Collapsed"/>
+                </StackPanel>
 
                 <StackPanel Spacing="8"
                             Width="320"
