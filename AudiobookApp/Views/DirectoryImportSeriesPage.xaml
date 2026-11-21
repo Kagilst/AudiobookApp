@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="AudiobookApp.Views.DirectoryImportSeriesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Padding="28" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+        <StackPanel Spacing="4">
+            <TextBlock Text="Combine into series"
+                       FontSize="24"
+                       FontWeight="SemiBold"/>
+            <TextBlock x:Name="SummaryText"
+                       Opacity="0.75"
+                       TextWrapping="WrapWholeWords"
+                       Text="Check ungrouped books, then add them to an existing series or create a new one. Drag books under a series name to set their order."/>
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Add to series"
+                        Click="AddToSeries_Click"/>
+                <Button Content="Create new series"
+                        Click="CreateSeries_Click"/>
+            </StackPanel>
+
+            <TextBox x:Name="SearchBox"
+                     Grid.Column="1"
+                     PlaceholderText="Search title or author"
+                     TextChanged="SearchBox_TextChanged"/>
+
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                <Button Content="Select all" Click="SelectAll_Click"/>
+                <Button Content="Select none" Click="SelectNone_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="SectionsList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                  Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding CountLabel}"
+                                               Opacity="0.65"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ReorderHint}"
+                                               Opacity="0.5"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Expander.Header>
+
+                            <ListView ItemsSource="{Binding Members}"
+                                      SelectionMode="None"
+                                      Margin="0,8,0,0"
+                                      CanDragItems="{Binding CanReorder}"
+                                      CanReorderItems="{Binding CanReorder}"
+                                      AllowDrop="{Binding CanReorder}"
+                                      DragItemsCompleted="SeriesList_DragItemsCompleted"
+                                      ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Padding="8,10" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="36"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      VerticalAlignment="Center"
+                                                      MinWidth="32"
+                                                      Visibility="{Binding CheckboxVisibility}"/>
+
+                                            <TextBlock Text="{Binding IndexDisplay}"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       Opacity="0.65"
+                                                       Visibility="{Binding OrderNumberVisibility}"/>
+
+                                            <Border Grid.Column="1"
+                                                    Width="48"
+                                                    Height="48"
+                                                    CornerRadius="4"
+                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1">
+                                                <Grid>
+                                                    <FontIcon Glyph="&#xE8D6;"
+                                                              FontSize="18"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                              HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                                    <Image Source="{Binding CoverImage}"
+                                                           Stretch="UniformToFill"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Author}"
+                                                           Opacity="0.7"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding LibraryBadge}"
+                                                       Opacity="0.55"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"/>
+
+                                            <Button Grid.Column="4"
+                                                    Content="Remove from series"
+                                                    Click="RemoveFromSeries_Click"
+                                                    Tag="{Binding}"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding RemoveFromSeriesVisibility}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Expander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+            <TextBlock x:Name="SelectionStatusText"
+                       VerticalAlignment="Center"
+                       Opacity="0.7"/>
+            <Button Grid.Column="1"
+                    Content="Cancel"
+                    Click="Cancel_Click"
+                    MinWidth="110"/>
+            <Button Grid.Column="2"
+                    Content="Done"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Click="Done_Click"
+                    MinWidth="120"/>
+        </Grid>
+    </Grid>
+</Page>

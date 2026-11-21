@@ -23,6 +23,8 @@ namespace AudiobookApp.Views
         private readonly List<EpubChapterContent> _chapters = new();
         private int _chapterIndex;
         private bool _isDarkMode;
+        private bool _suppressScrollPersist;
+        private double _pendingScrollRatio = -1;
 
         public event Action<Book>? ProgressChanged;
 
@@ -37,6 +39,8 @@ namespace AudiobookApp.Views
 
             Loaded += async (_, _) => await LoadBookAsync();
             Unloaded += (_, _) => PersistProgress();
+            PageScroller.ViewChanged += PageScroller_ViewChanged;
+            PageScroller.SizeChanged += PageScroller_SizeChanged;
         }
 
         private void DarkModeButton_Click(object sender, RoutedEventArgs e)
@@ -165,7 +169,7 @@ namespace AudiobookApp.Views
                 }
 
                 _chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, _chapters.Count - 1);
-                ShowChapter(_chapterIndex);
+                ShowChapter(_chapterIndex, restoreScroll: true);
             }
             catch (Exception ex)
             {
@@ -183,7 +187,7 @@ namespace AudiobookApp.Views
             await Task.CompletedTask;
         }
 
-        private void ShowChapter(int index)
+        private void ShowChapter(int index, bool restoreScroll = false)
         {
             if (index < 0 || index >= _chapters.Count)
                 return;
@@ -196,9 +200,23 @@ namespace AudiobookApp.Views
             PreviousChapterButton.IsEnabled = index > 0;
             NextChapterButton.IsEnabled = index < _chapters.Count - 1;
 
+            _suppressScrollPersist = true;
             RenderChapter(chapter);
 
-            PageScroller.ChangeView(0, 0, 1);
+            if (restoreScroll && _book.LastEpubScrollRatio > 0)
+            {
+                _pendingScrollRatio = Math.Clamp(_book.LastEpubScrollRatio, 0, 1);
+                PageScroller.UpdateLayout();
+                TryApplyPendingScroll();
+            }
+            else
+            {
+                _pendingScrollRatio = -1;
+                _book.LastEpubScrollRatio = 0;
+                PageScroller.ChangeView(0, 0, null, true);
+            }
+
+            _suppressScrollPersist = false;
 
             _book.LastChapterIndex = index;
             if (_chapters.Count > 1)
@@ -208,6 +226,45 @@ namespace AudiobookApp.Views
             }
 
             ProgressChanged?.Invoke(_book);
+        }
+
+        private void PageScroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            if (_suppressScrollPersist || e.IsIntermediate)
+                return;
+
+            CaptureScrollRatio();
+        }
+
+        private void PageScroller_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (_pendingScrollRatio >= 0)
+                TryApplyPendingScroll();
+        }
+
+        private void TryApplyPendingScroll()
+        {
+            if (_pendingScrollRatio < 0)
+                return;
+
+            PageScroller.UpdateLayout();
+            var scrollable = PageScroller.ScrollableHeight;
+            if (scrollable <= 1)
+                return;
+
+            var offset = _pendingScrollRatio * scrollable;
+            _suppressScrollPersist = true;
+            PageScroller.ChangeView(null, offset, null, true);
+            _suppressScrollPersist = false;
+            _pendingScrollRatio = -1;
+        }
+
+        private void CaptureScrollRatio()
+        {
+            var scrollable = PageScroller.ScrollableHeight;
+            _book.LastEpubScrollRatio = scrollable > 1
+                ? Math.Clamp(PageScroller.VerticalOffset / scrollable, 0, 1)
+                : 0;
         }
 
         private void RenderChapter(EpubChapterContent chapter)
@@ -239,18 +296,25 @@ namespace AudiobookApp.Views
         private void PreviousChapter_Click(object sender, RoutedEventArgs e)
         {
             if (_chapterIndex > 0)
-                ShowChapter(_chapterIndex - 1);
+                ShowChapter(_chapterIndex - 1, restoreScroll: false);
         }
 
         private void NextChapter_Click(object sender, RoutedEventArgs e)
         {
             if (_chapterIndex < _chapters.Count - 1)
-                ShowChapter(_chapterIndex + 1);
+                ShowChapter(_chapterIndex + 1, restoreScroll: false);
         }
 
         private void PersistProgress()
         {
+            CaptureScrollRatio();
             _book.LastChapterIndex = _chapterIndex;
+            if (_chapters.Count > 1)
+            {
+                _book.LastPositionSeconds = _chapterIndex;
+                _book.Duration = TimeSpan.FromSeconds(_chapters.Count - 1);
+            }
+
             ProgressChanged?.Invoke(_book);
         }
 

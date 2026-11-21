@@ -102,6 +102,13 @@ namespace AudiobookApp
 
         private void Epubs_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Epubs);
 
+        private void Help_Click(object sender, RoutedEventArgs e)
+        {
+            _showingFullPlayer = false;
+            ContentFrame.Content = new HelpPage();
+            UpdateMiniPlayerVisibility();
+        }
+
         private async void ClearLibrary_Click(object sender, RoutedEventArgs e)
         {
             var confirm = await new ContentDialog
@@ -464,12 +471,22 @@ namespace AudiobookApp
             page.OrderConfirmed += (reorderedSeries, orderedIds) =>
             {
                 var target = VM.Series.FirstOrDefault(s => s.Id == reorderedSeries.Id);
-                if (target != null)
+                if (target == null)
                 {
-                    target.BookIds = orderedIds.ToList();
-                    SaveSeries();
+                    ShowTab(_currentTab);
+                    return;
                 }
 
+                if (orderedIds.Count == 0)
+                {
+                    VM.Series.Remove(target);
+                }
+                else
+                {
+                    target.BookIds = orderedIds.ToList();
+                }
+
+                SaveSeries();
                 ShowTab(_currentTab);
             };
 
@@ -676,16 +693,24 @@ namespace AudiobookApp
                 return;
             }
 
+            ShowDirectoryImportReviewPage(candidates);
+        }
+
+        private void ShowDirectoryImportReviewPage(IReadOnlyList<ImportBookCandidate> candidates)
+        {
             var review = new DirectoryImportReviewPage(candidates);
             review.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
-            review.ImportConfirmed += selected => _ = ConfirmDirectoryImportAsync(selected);
+            review.ImportConfirmed += (selected, allCandidates) =>
+                _ = ConfirmDirectoryImportAsync(selected, allCandidates);
 
             _showingFullPlayer = false;
             ContentFrame.Content = review;
             UpdateMiniPlayerVisibility();
         }
 
-        private async Task ConfirmDirectoryImportAsync(IReadOnlyList<ImportBookCandidate> selected)
+        private async Task ConfirmDirectoryImportAsync(
+            IReadOnlyList<ImportBookCandidate> selected,
+            IReadOnlyList<ImportBookCandidate> allReviewCandidates)
         {
             // Skip books whose files are already in the library; keep importing the rest.
             var toImport = selected
@@ -737,51 +762,15 @@ namespace AudiobookApp
                     return;
             }
 
-            IReadOnlyList<ImportSeriesCandidate> seriesToCreate = Array.Empty<ImportSeriesCandidate>();
-
-            var proposed = DirectorySeriesGrouper.ProposeSeries(toImport);
-            if (proposed.Count > 0)
-            {
-                var ask = await new ContentDialog
-                {
-                    Title = "Auto-group into series?",
-                    Content =
-                        $"{proposed.Count} possible series were found from books in the same folder. " +
-                        "Would you like to review and create them?",
-                    PrimaryButtonText = "Review series",
-                    SecondaryButtonText = "Import without series",
-                    CloseButtonText = "Cancel",
-                    XamlRoot = Content.XamlRoot
-                }.ShowAsync();
-
-                if (ask == ContentDialogResult.None)
-                    return;
-
-                if (ask == ContentDialogResult.Primary)
-                {
-                    var seriesReview = new DirectorySeriesReviewPage(proposed, toImport);
-                    seriesReview.CancelRequested += () => ShowTab(LibraryTab.FullLibrary);
-                    seriesReview.Skipped += () => _ = FinishDirectoryImportAsync(toImport, Array.Empty<ImportSeriesCandidate>(), skipped);
-                    seriesReview.Confirmed += confirmed =>
-                        _ = FinishDirectoryImportAsync(toImport, confirmed, skipped);
-
-                    _showingFullPlayer = false;
-                    ContentFrame.Content = seriesReview;
-                    UpdateMiniPlayerVisibility();
-                    return;
-                }
-            }
-
-            await FinishDirectoryImportAsync(toImport, seriesToCreate, skipped);
+            await FinishDirectoryImportAsync(toImport, skipped, allReviewCandidates);
         }
 
         private async Task FinishDirectoryImportAsync(
             IReadOnlyList<ImportBookCandidate> toImport,
-            IReadOnlyList<ImportSeriesCandidate> seriesToCreate,
-            int skippedExisting)
+            int skippedExisting,
+            IReadOnlyList<ImportBookCandidate> allReviewCandidates)
         {
-            var candidateToBook = new Dictionary<Guid, Book>();
-            var added = 0;
+            var importedBooks = new List<Book>();
 
             foreach (var candidate in toImport)
             {
@@ -813,58 +802,142 @@ namespace AudiobookApp
                 }
 
                 VM.Books.Add(book);
-                candidateToBook[candidate.Id] = book;
-                added++;
+                importedBooks.Add(book);
             }
 
-            foreach (var seriesCandidate in seriesToCreate.Where(s => s.IsSelected && s.Books.Count > 0))
+            if (importedBooks.Count > 0)
+                SaveBooks();
+
+            var message = importedBooks.Count == 1
+                ? "Imported 1 book."
+                : $"Imported {importedBooks.Count} books.";
+            if (skippedExisting > 0)
+                message += $" Skipped {skippedExisting} already in your library.";
+
+            if (importedBooks.Count == 0)
             {
-                var bookIds = seriesCandidate.Books
-                    .Select(b => candidateToBook.TryGetValue(b.Id, out var book) ? book : null)
-                    .Where(b => b != null)
-                    .Select(b => b!.Id)
-                    .Distinct()
-                    .ToList();
+                if (skippedExisting > 0)
+                    await ShowDuplicateDialogAsync();
+                ShowTab(LibraryTab.FullLibrary);
+                return;
+            }
 
-                if (bookIds.Count < 2)
-                    continue;
+            var askSeries = await new ContentDialog
+            {
+                Title = "Import complete",
+                Content = message + Environment.NewLine + Environment.NewLine +
+                          "Would you like to combine any of these books into series?",
+                PrimaryButtonText = "Yes",
+                CloseButtonText = "No",
+                XamlRoot = Content.XamlRoot
+            }.ShowAsync();
 
-                foreach (var id in bookIds)
-                    RemoveBookFromAllSeries(id);
+            if (askSeries != ContentDialogResult.Primary)
+            {
+                ShowTab(LibraryTab.FullLibrary);
+                return;
+            }
+
+            ShowDirectoryImportSeriesPage(importedBooks, allReviewCandidates);
+        }
+
+        private void ShowDirectoryImportSeriesPage(
+            IReadOnlyList<Book> importedBooks,
+            IReadOnlyList<ImportBookCandidate> reviewCandidates,
+            IReadOnlyList<Series>? seriesSnapshot = null,
+            HashSet<Guid>? importedIds = null)
+        {
+            seriesSnapshot ??= VM.Series
+                .Select(s => new Series
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    BookIds = s.BookIds.ToList()
+                })
+                .ToList();
+            importedIds ??= importedBooks.Select(b => b.Id).ToHashSet();
+
+            var snapshot = seriesSnapshot;
+            var ids = importedIds;
+
+            var page = new DirectoryImportSeriesPage(importedBooks, VM.Books, VM.Series);
+
+            page.AddToSeriesRequested += (series, newBooks) =>
+            {
+                var target = VM.Series.FirstOrDefault(s => s.Id == series.Id);
+                if (target == null || newBooks.Count == 0)
+                    return;
+
+                foreach (var book in newBooks)
+                {
+                    RemoveBookFromAllSeries(book.Id);
+                    if (!target.BookIds.Contains(book.Id))
+                        target.BookIds.Add(book.Id);
+                }
+
+                SaveSeries();
+                page.RefreshSeries(VM.Series, VM.Books);
+            };
+
+            page.CreateSeriesRequested += (name, books) =>
+            {
+                if (books.Count == 0)
+                    return;
+
+                foreach (var book in books)
+                    RemoveBookFromAllSeries(book.Id);
 
                 VM.Series.Add(new Series
                 {
                     Id = Guid.NewGuid(),
-                    Name = string.IsNullOrWhiteSpace(seriesCandidate.Name)
-                        ? "Untitled Series"
-                        : seriesCandidate.Name.Trim(),
-                    BookIds = bookIds
+                    Name = name.Trim(),
+                    BookIds = books.Select(b => b.Id).Distinct().ToList()
                 });
-            }
 
-            if (added > 0)
-                SaveBooks();
-            if (seriesToCreate.Count > 0)
                 SaveSeries();
+                page.RefreshSeries(VM.Series, VM.Books);
+            };
 
-            if (skippedExisting > 0 || added > 0)
+            page.SeriesOrderChangedRequested += (series, orderedIds) =>
             {
-                var message = added == 1
-                    ? "Imported 1 book."
-                    : $"Imported {added} books.";
-                if (skippedExisting > 0)
-                    message += $" Skipped {skippedExisting} already in your library.";
+                var target = VM.Series.FirstOrDefault(s => s.Id == series.Id);
+                if (target == null)
+                    return;
 
-                await new ContentDialog
+                target.BookIds = orderedIds.ToList();
+                SaveSeries();
+            };
+
+            page.RemoveBookFromSeriesRequested += book =>
+            {
+                RemoveBookFromAllSeries(book.Id);
+                SaveSeries();
+                page.RefreshSeries(VM.Series, VM.Books);
+            };
+
+            page.DoneRequested += () => ShowTab(LibraryTab.FullLibrary);
+
+            page.CancelRequested += () =>
+            {
+                foreach (var id in ids)
                 {
-                    Title = "Import complete",
-                    Content = message,
-                    CloseButtonText = "OK",
-                    XamlRoot = Content.XamlRoot
-                }.ShowAsync();
-            }
+                    var book = VM.Books.FirstOrDefault(b => b.Id == id);
+                    if (book != null)
+                        VM.Books.Remove(book);
+                }
 
-            ShowTab(LibraryTab.FullLibrary);
+                VM.Series.Clear();
+                foreach (var series in snapshot)
+                    VM.Series.Add(series);
+
+                SaveBooks();
+                SaveSeries();
+                ShowDirectoryImportReviewPage(reviewCandidates);
+            };
+
+            _showingFullPlayer = false;
+            ContentFrame.Content = page;
+            UpdateMiniPlayerVisibility();
         }
 
         private async Task ImportMultiFileAudiobookAsync()

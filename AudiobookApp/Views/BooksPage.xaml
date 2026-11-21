@@ -16,12 +16,12 @@
                                         Click="SeriesMemberEdit_Click"/>
                         <MenuFlyoutItem Text="Add tags"
                                         Click="SeriesMemberAddTags_Click"/>
-                        <MenuFlyoutItem Text="Remove"
+                        <MenuFlyoutItem Text="Remove from series"
                                         Click="SeriesMemberRemove_Click"/>
                     </MenuFlyout>
                 </Grid.ContextFlyout>
 
-                <Grid ColumnDefinitions="48,*,Auto"
+                <Grid ColumnDefinitions="48,*,Auto,Auto"
                       ColumnSpacing="12">
                     <Border Width="48"
                             Height="48"
@@ -47,6 +47,12 @@
                                Text="{Binding ProgressText}"
                                VerticalAlignment="Center"
                                Opacity="0.7"/>
+
+                    <Button Grid.Column="3"
+                            Content="Remove"
+                            Click="SeriesMemberRemove_Click"
+                            VerticalAlignment="Center"
+                            ToolTipService.ToolTip="Remove from series or library"/>
                 </Grid>
             </Grid>
         </DataTemplate>

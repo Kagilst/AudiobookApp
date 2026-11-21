@@ -53,17 +53,28 @@
             </NavigationView.PaneCustomContent>
 
             <NavigationView.PaneFooter>
-                <Button x:Name="ClearLibraryButton"
-                        Click="ClearLibrary_Click"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Padding="12,10"
-                        Margin="0,0,0,8">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Delete"/>
-                        <TextBlock Text="Clear library"/>
-                    </StackPanel>
-                </Button>
+                <StackPanel Spacing="4" Padding="0,0,0,8">
+                    <Button x:Name="HelpButton"
+                            Click="Help_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Padding="12,10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Help"/>
+                            <TextBlock Text="Help"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="ClearLibraryButton"
+                            Click="ClearLibrary_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Padding="12,10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Delete"/>
+                            <TextBlock Text="Clear library"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
             </NavigationView.PaneFooter>
 
             <Frame x:Name="ContentFrame"/>

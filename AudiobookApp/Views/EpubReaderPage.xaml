@@ -80,6 +80,7 @@
               Margin="0,16,0,0"
               MaxWidth="820"
               HorizontalAlignment="Center"
+              ColumnSpacing="48"
               ColumnDefinitions="Auto,*,Auto">
             <Button x:Name="PreviousChapterButton"
                     Content="Previous"
@@ -95,6 +96,7 @@
                        Grid.Column="1"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
+                       Margin="24,0"
                        FontFamily="Georgia"
                        Foreground="#6B5A4E"/>
 

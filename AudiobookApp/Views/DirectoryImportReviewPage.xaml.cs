@@ -24,7 +24,7 @@ namespace AudiobookApp.Views
         private enum ReviewFilter { All, MergedOnly, SingularOnly, EpubOnly }
         private ReviewFilter _filter = ReviewFilter.All;
 
-        public event Action<IReadOnlyList<ImportBookCandidate>>? ImportConfirmed;
+        public event Action<IReadOnlyList<ImportBookCandidate>, IReadOnlyList<ImportBookCandidate>>? ImportConfirmed;
         public event Action? CancelRequested;
 
         public DirectoryImportReviewPage(IEnumerable<ImportBookCandidate> candidates)
@@ -329,18 +329,21 @@ namespace AudiobookApp.Views
 
         private void Import_Click(object sender, RoutedEventArgs e)
         {
+            // Persist edits back onto candidates before leaving the page.
+            foreach (var row in _allRows)
+            {
+                row.Candidate.Title = row.Title;
+                row.Candidate.Author = row.Author;
+                row.Candidate.IsSelected = row.IsSelected;
+            }
+
             var selected = _allRows
                 .Where(r => r.IsSelected)
-                .Select(r =>
-                {
-                    r.Candidate.Title = r.Title;
-                    r.Candidate.Author = r.Author;
-                    r.Candidate.IsSelected = true;
-                    return r.Candidate;
-                })
+                .Select(r => r.Candidate)
                 .ToList();
 
-            ImportConfirmed?.Invoke(selected);
+            var all = _allRows.Select(r => r.Candidate).ToList();
+            ImportConfirmed?.Invoke(selected, all);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

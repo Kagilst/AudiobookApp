@@ -22,8 +22,9 @@
     <None Remove="Views\EpubReaderPage.xaml" />
     <None Remove="Views\MultiFileSortPage.xaml" />
     <None Remove="Views\DirectoryImportReviewPage.xaml" />
-    <None Remove="Views\DirectorySeriesReviewPage.xaml" />
+    <None Remove="Views\DirectoryImportSeriesPage.xaml" />
     <None Remove="Views\SeriesReorderPage.xaml" />
+    <None Remove="Views\HelpPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +35,9 @@
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Assets\Help\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -95,12 +99,17 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Page Update="Views\DirectorySeriesReviewPage.xaml">
+    <Page Update="Views\DirectoryImportSeriesPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\SeriesReorderPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\HelpPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

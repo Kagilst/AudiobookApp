@@ -52,6 +52,11 @@ namespace AudiobookApp.Models
         /// </summary>
         public int LastChapterIndex { get; set; }
 
+        /// <summary>
+        /// Scroll position within the current EPUB chapter, as a 0–1 ratio of scrollable height.
+        /// </summary>
+        public double LastEpubScrollRatio { get; set; }
+
         public double PlaybackSpeed { get; set; } = 1.0;
 
         [JsonIgnore]

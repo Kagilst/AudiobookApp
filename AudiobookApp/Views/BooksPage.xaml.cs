@@ -429,7 +429,7 @@ namespace AudiobookApp.Views
                 SelectionMode = ListViewSelectionMode.Single,
                 IsItemClickEnabled = true,
                 Height = 360,
-                Width = 440,
+                Width = 520,
                 ItemTemplate = (DataTemplate)Resources["SeriesMemberTemplate"]
             };
 
