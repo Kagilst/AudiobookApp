@@ -8,9 +8,26 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
+
+            <!-- Whiter light theme; pane + page share the same solid white surface. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="AppSurfaceColor">#FFFFFF</Color>
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurfaceColor}"/>
+
+                    <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource AppSurfaceColor}"/>
+                    <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{StaticResource AppSurfaceColor}"/>
+                    <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{StaticResource AppSurfaceColor}"/>
+                    <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush" Color="#F5F5F5"/>
+                    <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource AppSurfaceColor}"/>
+
+                    <!-- NavigationView left pane is transparent by default; force white so it themes with the app. -->
+                    <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="{StaticResource AppSurfaceColor}"/>
+                    <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="{StaticResource AppSurfaceColor}"/>
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="{StaticResource AppSurfaceColor}"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

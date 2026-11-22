@@ -4,12 +4,15 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using AudiobookApp.ViewModels;
 using AudiobookApp.Models;
 using AudiobookApp.Views;
 using AudiobookApp.Services;
+using Windows.Graphics;
 using WinRT.Interop;
 using Windows.Storage.Pickers;
 
@@ -31,6 +34,12 @@ namespace AudiobookApp
         private LibraryTab _currentTab = LibraryTab.FullLibrary;
         private bool _showingFullPlayer;
         private bool _miniPlayerDismissed;
+        private bool _compactMode;
+        private AppWindow? _appWindow;
+        private OverlappedPresenter? _presenter;
+        private SizeInt32 _restoreSize;
+        private PointInt32 _restorePosition;
+        private bool _hadRestoreBounds;
 
         private readonly string booksPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -45,12 +54,16 @@ namespace AudiobookApp
         public MainWindow()
         {
             InitializeComponent();
+            AppThemeService.Initialize(this);
 
             LoadBooks();
             LoadSeries();
 
-            MiniPlayer.Attach(_playback);
+            Activated += MainWindow_Activated;
+
+            MiniPlayer.Attach(_playback, GetSeriesLabelForBook);
             MiniPlayer.ExpandRequested += ShowFullPlayer;
+            MiniPlayer.CollapseRequested += EnterCompactMode;
             MiniPlayer.CloseRequested += () =>
             {
                 _miniPlayerDismissed = true;
@@ -58,10 +71,23 @@ namespace AudiobookApp
                 UpdateMiniPlayerVisibility();
             };
 
+            CompactPlayer.Attach(_playback, GetSeriesInfoForBook);
+            CompactPlayer.ExpandRequested += ExitCompactMode;
+            CompactPlayer.PinChanged += OnCompactPinChanged;
+
             _playback.PlaybackPersisted += _ => SaveBooks();
+            _playback.BookFinished += book =>
+            {
+                DispatcherQueue.TryEnqueue(() => _ = OnBookFinishedAsync(book));
+            };
             _playback.StateChanged += () =>
             {
-                DispatcherQueue.TryEnqueue(UpdateMiniPlayerVisibility);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    UpdateMiniPlayerVisibility();
+                    MiniPlayer.RefreshSeriesLabel();
+                    CompactPlayer.RefreshSeriesLabel();
+                });
             };
 
             _booksPage.ImportRequested += async (_, _) => await ImportBookAsync();
@@ -95,6 +121,9 @@ namespace AudiobookApp
 
             ShowTab(LibraryTab.FullLibrary);
         }
+
+        private void MainWindow_Activated(object sender, WindowActivatedEventArgs args) =>
+            EnsureAppWindow();
 
         private void FullLibrary_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.FullLibrary);
 
@@ -200,7 +229,7 @@ namespace AudiobookApp
                 MatchesTab(b) && MatchesSearch(b) && MatchesTags(b) && MatchesProgress(b);
 
             var items = new List<LibraryItem>();
-            var includedBookIds = new HashSet<Guid>();
+            var seriesMemberIds = new HashSet<Guid>(VM.Series.SelectMany(s => s.BookIds));
 
             if (!_booksPage.SinglesOnlyFilter)
             {
@@ -246,16 +275,14 @@ namespace AudiobookApp
                         Series = series,
                         Members = orderedVisible
                     });
-
-                    foreach (var member in members)
-                        includedBookIds.Add(member.Id);
                 }
             }
 
             if (!_booksPage.SeriesOnlyFilter)
             {
+                // Singles = books that are not members of any series.
                 foreach (var book in VM.Books
-                             .Where(b => !includedBookIds.Contains(b.Id))
+                             .Where(b => !seriesMemberIds.Contains(b.Id))
                              .Where(MatchesBookFilters))
                 {
                     items.Add(new LibraryItem
@@ -286,9 +313,273 @@ namespace AudiobookApp
 
         private void UpdateMiniPlayerVisibility()
         {
-            MiniPlayer.Visibility = _playback.HasSession && !_showingFullPlayer && !_miniPlayerDismissed
+            MiniPlayer.Visibility = _playback.HasSession
+                && !_showingFullPlayer
+                && !_miniPlayerDismissed
+                && !_compactMode
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+        }
+
+        private void EnterCompactMode()
+        {
+            if (!_playback.HasSession || _compactMode)
+                return;
+
+            EnsureAppWindow();
+            if (_appWindow == null)
+                return;
+
+            _compactMode = true;
+
+            // Capture pre-compact bounds only when the window still looks like a normal app frame.
+            var current = _appWindow.Size;
+            if (!_hadRestoreBounds || current.Width >= 900 && current.Height >= 600)
+            {
+                _restoreSize = current;
+                _restorePosition = _appWindow.Position;
+                _hadRestoreBounds = true;
+            }
+
+            NormalShell.Visibility = Visibility.Collapsed;
+            CompactPlayer.Visibility = Visibility.Visible;
+            CompactPlayer.IsPinned = false;
+            UpdateMiniPlayerVisibility();
+
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(CompactPlayer.DragHandle);
+
+            if (_appWindow?.TitleBar != null)
+            {
+                // Remove the reserved title-bar band that was leaving empty space under the slider.
+                _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+            }
+
+            if (_presenter != null)
+            {
+                _presenter.IsResizable = false;
+                _presenter.IsMaximizable = false;
+                _presenter.IsMinimizable = false;
+                // Borderless + tiny preferred mins so Windows doesn't force empty height under the seek bar.
+                _presenter.PreferredMinimumWidth = 1;
+                _presenter.PreferredMinimumHeight = 1;
+                _presenter.SetBorderAndTitleBar(false, false);
+                _presenter.IsAlwaysOnTop = false;
+            }
+
+            CompactPlayer.UpdateLayout();
+            ResizeCompactToContent();
+            PositionCompactNearBottomRight();
+
+            // Re-measure after title-bar collapse + first layout pass.
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_compactMode)
+                    return;
+
+                CompactPlayer.UpdateLayout();
+                ResizeCompactToContent();
+            });
+        }
+
+        private void ResizeCompactToContent()
+        {
+            var size = CompactPlayer.GetContentSize();
+            var width = size.Width;
+            var height = size.Height;
+            if (width < 100)
+                width = 560;
+            if (height < 40)
+                height = 56;
+
+            width = Math.Ceiling(width);
+            height = Math.Ceiling(height);
+
+            CompactPlayer.Width = width;
+            CompactPlayer.Height = height;
+            ResizeClientToDip(width, height);
+        }
+
+        private void ExitCompactMode()
+        {
+            if (!_compactMode)
+                return;
+
+            _compactMode = false;
+            CompactPlayer.IsPinned = false;
+
+            // Restore a full-size window first so the shell isn't laid out in the tiny compact frame.
+            EnsureAppWindow();
+            RestoreFullWindowBounds();
+
+            try
+            {
+                // Clear custom title bar while ExtendsContentIntoTitleBar is still true.
+                if (ExtendsContentIntoTitleBar)
+                    SetTitleBar(RootGrid);
+                ExtendsContentIntoTitleBar = false;
+            }
+            catch
+            {
+                ExtendsContentIntoTitleBar = false;
+            }
+
+            try
+            {
+                if (_appWindow?.TitleBar != null)
+                    _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (_presenter != null)
+                {
+                    _presenter.IsAlwaysOnTop = false;
+                    _presenter.IsResizable = true;
+                    _presenter.IsMaximizable = true;
+                    _presenter.IsMinimizable = true;
+                    _presenter.PreferredMinimumWidth = null;
+                    _presenter.PreferredMinimumHeight = null;
+                    _presenter.SetBorderAndTitleBar(true, true);
+                }
+            }
+            catch
+            {
+            }
+
+            CompactPlayer.ClearValue(FrameworkElement.WidthProperty);
+            CompactPlayer.ClearValue(FrameworkElement.HeightProperty);
+            CompactPlayer.Visibility = Visibility.Collapsed;
+            NormalShell.Visibility = Visibility.Visible;
+
+            // Chrome changes can alter outer size — restore again after shell is visible.
+            RestoreFullWindowBounds();
+            Activate();
+            UpdateMiniPlayerVisibility();
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_compactMode)
+                    return;
+
+                RestoreFullWindowBounds();
+                Activate();
+            });
+        }
+
+        private void RestoreFullWindowBounds()
+        {
+            if (_appWindow == null)
+                return;
+
+            const int minWidth = 900;
+            const int minHeight = 600;
+
+            var width = _hadRestoreBounds ? _restoreSize.Width : 0;
+            var height = _hadRestoreBounds ? _restoreSize.Height : 0;
+
+            // If we don't have a real pre-compact size (or it still looks compact), use a default.
+            if (width < minWidth || height < minHeight)
+            {
+                var scale = GetDpiScale();
+                width = (int)Math.Round(1100 * scale);
+                height = (int)Math.Round(720 * scale);
+            }
+
+            var x = _hadRestoreBounds ? _restorePosition.X : _appWindow.Position.X;
+            var y = _hadRestoreBounds ? _restorePosition.Y : _appWindow.Position.Y;
+
+            try
+            {
+                _appWindow.MoveAndResize(new RectInt32(x, y, width, height));
+            }
+            catch
+            {
+                try
+                {
+                    _appWindow.Resize(new SizeInt32(width, height));
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void OnCompactPinChanged(bool pinned)
+        {
+            if (_presenter != null)
+                _presenter.IsAlwaysOnTop = pinned;
+        }
+
+        private void ResizeToDip(double widthDip, double heightDip)
+        {
+            if (_appWindow == null)
+                return;
+
+            var scale = GetDpiScale();
+            _appWindow.Resize(new SizeInt32(
+                (int)Math.Round(widthDip * scale),
+                (int)Math.Round(heightDip * scale)));
+        }
+
+        private void ResizeClientToDip(double widthDip, double heightDip)
+        {
+            if (_appWindow == null)
+                return;
+
+            var scale = GetDpiScale();
+            var size = new SizeInt32(
+                (int)Math.Round(widthDip * scale),
+                (int)Math.Round(heightDip * scale));
+
+            try
+            {
+                _appWindow.ResizeClient(size);
+            }
+            catch
+            {
+                // Fallback if ResizeClient isn't available for this presenter.
+                _appWindow.Resize(size);
+            }
+        }
+
+        private double GetDpiScale()
+        {
+            var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+            return scale > 0 ? scale : 1.0;
+        }
+
+        private void PositionCompactNearBottomRight()
+        {
+            if (_appWindow == null)
+                return;
+
+            try
+            {
+                var display = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Nearest);
+                var work = display.WorkArea;
+                var size = _appWindow.Size;
+                var x = work.X + work.Width - size.Width - 24;
+                var y = work.Y + work.Height - size.Height - 24;
+                _appWindow.Move(new PointInt32(x, y));
+            }
+            catch
+            {
+            }
+        }
+
+        private void EnsureAppWindow()
+        {
+            if (_appWindow != null)
+                return;
+
+            var hwnd = WindowNative.GetWindowHandle(this);
+            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+            _appWindow = AppWindow.GetFromWindowId(windowId);
+            _presenter = _appWindow.Presenter as OverlappedPresenter;
         }
 
         private IEnumerable<string> GetAllTags()
@@ -1286,12 +1577,18 @@ namespace AudiobookApp
             if (_playback.CurrentBook == null)
                 return;
 
+            if (_compactMode)
+                ExitCompactMode();
+
             _miniPlayerDismissed = false;
 
             try
             {
                 _showingFullPlayer = true;
-                ContentFrame.Content = new PlayerPage(_playback);
+                var page = new PlayerPage(_playback, GetSeriesLabelForBook);
+                page.ShrinkRequested += () => ShowTab(_currentTab);
+                page.ShrinkToMiniRequested += EnterCompactMode;
+                ContentFrame.Content = page;
                 UpdateMiniPlayerVisibility();
             }
             catch (Exception ex)
@@ -1301,6 +1598,90 @@ namespace AudiobookApp
                 _ = new ContentDialog
                 {
                     Title = "Player error",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
+        }
+
+        private string? GetSeriesLabelForBook(Book? book)
+        {
+            var info = GetSeriesInfoForBook(book);
+            if (info == null)
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(info.Value.SeriesName) &&
+                !string.IsNullOrWhiteSpace(info.Value.BookCount))
+            {
+                return $"{info.Value.SeriesName} · {info.Value.BookCount}";
+            }
+
+            return info.Value.SeriesName ?? info.Value.BookCount;
+        }
+
+        private (string? SeriesName, string? BookCount)? GetSeriesInfoForBook(Book? book)
+        {
+            if (book == null)
+                return null;
+
+            foreach (var series in VM.Series)
+            {
+                var index = series.BookIds.FindIndex(id => id == book.Id);
+                if (index < 0)
+                    continue;
+
+                return (series.Name, $"Book ({index + 1}/{series.BookIds.Count})");
+            }
+
+            return null;
+        }
+
+        private Book? GetNextSeriesBook(Book finished)
+        {
+            foreach (var series in VM.Series)
+            {
+                var index = series.BookIds.FindIndex(id => id == finished.Id);
+                if (index < 0)
+                    continue;
+
+                if (index + 1 >= series.BookIds.Count)
+                    return null;
+
+                var nextId = series.BookIds[index + 1];
+                return VM.Books.FirstOrDefault(b => b.Id == nextId);
+            }
+
+            return null;
+        }
+
+        private async Task OnBookFinishedAsync(Book finished)
+        {
+            SaveBooks();
+
+            if (!_playback.SeriesAutoplayEnabled)
+                return;
+
+            var next = GetNextSeriesBook(finished);
+            if (next == null || next.MediaType != BookMediaType.Audiobook)
+                return;
+
+            try
+            {
+                await _playback.OpenBookAsync(next, autoPlay: true);
+                MiniPlayer.RefreshSeriesLabel();
+                CompactPlayer.RefreshSeriesLabel();
+
+                if (_showingFullPlayer)
+                    ShowFullPlayer();
+                else
+                    UpdateMiniPlayerVisibility();
+            }
+            catch (Exception ex)
+            {
+                await new ContentDialog
+                {
+                    Title = "Unable to autoplay next book",
                     Content = ex.Message,
                     CloseButtonText = "OK",
                     XamlRoot = Content.XamlRoot

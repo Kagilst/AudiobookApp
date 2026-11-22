@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="AudiobookApp.Views.CompactPlayerBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AudiobookApp.Views"
+    HorizontalAlignment="Left"
+    VerticalAlignment="Top">
+
+    <UserControl.Resources>
+        <Style x:Key="CompactIconButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CompactIconToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+          VerticalAlignment="Top"
+          HorizontalAlignment="Left"
+          Padding="4,2,6,1"
+          RowSpacing="1">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="110"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Bare grip strips — no filled “button” chrome -->
+            <Border x:Name="DragRegion"
+                    Width="12"
+                    Margin="0,2,4,2"
+                    Background="Transparent"
+                    VerticalAlignment="Stretch"
+                    ToolTipService.ToolTip="Drag to move">
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Spacing="2"
+                            IsHitTestVisible="False">
+                    <Ellipse Width="2" Height="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                    <Ellipse Width="2" Height="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                    <Ellipse Width="2" Height="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                    <Ellipse Width="2" Height="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                    <Ellipse Width="2" Height="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Width="44"
+                    Height="44"
+                    CornerRadius="4"
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    VerticalAlignment="Center"
+                    IsHitTestVisible="False">
+                <Grid>
+                    <FontIcon x:Name="CoverPlaceholder"
+                              Glyph="&#xE8D6;"
+                              FontSize="14"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+                    <Image x:Name="CoverImage"
+                           Stretch="UniformToFill"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Width="1"
+                    Margin="6,6,0,6"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    VerticalAlignment="Stretch"/>
+
+            <StackPanel Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Margin="6,0"
+                        Spacing="0"
+                        IsHitTestVisible="False">
+                <local:MarqueeText x:Name="SeriesLineText"
+                                   FontSize="10"
+                                   TextOpacity="0.75"
+                                   LineHeight="13"/>
+                <local:MarqueeText x:Name="TitleText"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   LineHeight="14"/>
+                <local:MarqueeText x:Name="AuthorText"
+                                   FontSize="10"
+                                   TextOpacity="0.8"
+                                   LineHeight="13"/>
+                <local:MarqueeText x:Name="ChapterText"
+                                   FontSize="10"
+                                   TextOpacity="0.75"
+                                   LineHeight="13"/>
+            </StackPanel>
+
+            <Border Grid.Column="4"
+                    Width="1"
+                    Margin="0,6"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    VerticalAlignment="Stretch"/>
+
+            <StackPanel Grid.Column="5"
+                        Orientation="Horizontal"
+                        Spacing="1"
+                        Margin="4,0"
+                        VerticalAlignment="Center">
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="PreviousButton_Click"
+                        ToolTipService.ToolTip="Previous chapter">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE892;"
+                              FontSize="12"/>
+                </Button>
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="RewindButton_Click"
+                        ToolTipService.ToolTip="Back 10 seconds">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xEB9E;"
+                              FontSize="14"/>
+                </Button>
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="PlayPauseButton_Click"
+                        ToolTipService.ToolTip="Play / Pause">
+                    <FontIcon x:Name="PlayPauseIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE768;"
+                              FontSize="12"/>
+                </Button>
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="FastForwardButton_Click"
+                        ToolTipService.ToolTip="Forward 10 seconds">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xEB9D;"
+                              FontSize="14"/>
+                </Button>
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="NextButton_Click"
+                        ToolTipService.ToolTip="Next chapter">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE893;"
+                              FontSize="12"/>
+                </Button>
+            </StackPanel>
+
+            <Border Grid.Column="6"
+                    Width="1"
+                    Margin="0,6"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    VerticalAlignment="Stretch"/>
+
+            <StackPanel Grid.Column="7"
+                        Orientation="Horizontal"
+                        Spacing="1"
+                        Margin="4,0"
+                        VerticalAlignment="Center">
+                <Button x:Name="VolumeButton"
+                        Style="{StaticResource CompactIconButtonStyle}"
+                        Click="VolumeButton_Click"
+                        ToolTipService.ToolTip="Volume">
+                    <Button.Flyout>
+                        <Flyout Placement="Top"
+                                ShouldConstrainToRootBounds="False">
+                            <StackPanel Spacing="8" Padding="8" MinWidth="64">
+                                <TextBlock x:Name="VolumeFlyoutValueText"
+                                           HorizontalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           FontSize="12"/>
+                                <Slider x:Name="VolumeSlider"
+                                        Orientation="Vertical"
+                                        Height="140"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        StepFrequency="1"
+                                        IsThumbToolTipEnabled="False"
+                                        HorizontalAlignment="Center"
+                                        ValueChanged="VolumeSlider_ValueChanged"/>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                    <FontIcon x:Name="VolumeIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE767;"
+                              FontSize="12"/>
+                </Button>
+
+                <Button x:Name="SpeedButton"
+                        Style="{StaticResource CompactIconButtonStyle}"
+                        Click="SpeedButton_Click"
+                        ToolTipService.ToolTip="Playback speed">
+                    <Button.Flyout>
+                        <Flyout Placement="Top"
+                                ShouldConstrainToRootBounds="False">
+                            <StackPanel Spacing="8" Padding="8" MinWidth="64">
+                                <TextBlock x:Name="SpeedFlyoutValueText"
+                                           HorizontalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           FontSize="12"/>
+                                <Slider x:Name="SpeedSlider"
+                                        Orientation="Vertical"
+                                        Height="140"
+                                        Minimum="0.5"
+                                        Maximum="4.0"
+                                        StepFrequency="0.05"
+                                        IsThumbToolTipEnabled="False"
+                                        HorizontalAlignment="Center"
+                                        ValueChanged="SpeedSlider_ValueChanged"/>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xEC4A;"
+                              FontSize="12"/>
+                </Button>
+
+                <Button x:Name="SleepButton"
+                        Style="{StaticResource CompactIconButtonStyle}"
+                        Click="SleepButton_Click"
+                        ToolTipService.ToolTip="Sleep timer">
+                    <Button.Flyout>
+                        <MenuFlyout Placement="Top"
+                                    ShouldConstrainToRootBounds="False">
+                            <MenuFlyoutItem Text="5 minutes" Click="SleepPreset_Click" Tag="5"/>
+                            <MenuFlyoutItem Text="10 minutes" Click="SleepPreset_Click" Tag="10"/>
+                            <MenuFlyoutItem Text="15 minutes" Click="SleepPreset_Click" Tag="15"/>
+                            <MenuFlyoutItem Text="30 minutes" Click="SleepPreset_Click" Tag="30"/>
+                            <MenuFlyoutItem Text="45 minutes" Click="SleepPreset_Click" Tag="45"/>
+                            <MenuFlyoutItem Text="60 minutes" Click="SleepPreset_Click" Tag="60"/>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="End of chapter" Click="SleepEndChapter_Click"/>
+                            <MenuFlyoutItem Text="Custom…" Click="SleepCustom_Click"/>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="Cancel timer" Click="SleepCancel_Click"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE708;"
+                              FontSize="12"/>
+                </Button>
+
+                <ToggleButton x:Name="AutoplayButton"
+                              Style="{StaticResource CompactIconToggleStyle}"
+                              Click="AutoplayButton_Click"
+                              ToolTipService.ToolTip="Series autoplay"
+                              Visibility="Collapsed">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE8EE;"
+                              FontSize="12"/>
+                </ToggleButton>
+            </StackPanel>
+
+            <Border Grid.Column="8"
+                    Width="1"
+                    Margin="0,6"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    VerticalAlignment="Stretch"/>
+
+            <StackPanel Grid.Column="9"
+                        Orientation="Horizontal"
+                        Spacing="1"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center">
+                <Button Style="{StaticResource CompactIconButtonStyle}"
+                        Click="ExpandButton_Click"
+                        ToolTipService.ToolTip="Restore app">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE740;"
+                              FontSize="12"/>
+                </Button>
+
+                <ToggleButton x:Name="PinButton"
+                              Style="{StaticResource CompactIconToggleStyle}"
+                              Click="PinButton_Click"
+                              ToolTipService.ToolTip="Pin: always on top and lock position">
+                    <FontIcon x:Name="PinIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="&#xE718;"
+                              FontSize="12"/>
+                </ToggleButton>
+            </StackPanel>
+        </Grid>
+
+        <!-- Minimal chapter seek bar (no thumb) -->
+        <Border x:Name="SeekTrack"
+                Grid.Row="1"
+                Height="3"
+                Margin="4,0,4,0"
+                CornerRadius="2"
+                VerticalAlignment="Top"
+                Background="{ThemeResource SubtleFillColorTertiaryBrush}"
+                PointerPressed="SeekTrack_PointerPressed"
+                PointerMoved="SeekTrack_PointerMoved"
+                PointerReleased="SeekTrack_PointerReleased"
+                PointerCaptureLost="SeekTrack_PointerReleased">
+            <Border x:Name="SeekFill"
+                    HorizontalAlignment="Left"
+                    Width="0"
+                    CornerRadius="2"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"/>
+        </Border>
+    </Grid>
+</UserControl>

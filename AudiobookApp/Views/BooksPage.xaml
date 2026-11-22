@@ -316,7 +316,8 @@
 
     <Grid Padding="16"
           RowDefinitions="Auto,Auto,*"
-          RowSpacing="12">
+          RowSpacing="12"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
         <Grid ColumnDefinitions="Auto,*,Auto"
               ColumnSpacing="12">
@@ -422,6 +423,12 @@
                         Orientation="Horizontal"
                         Spacing="8"
                         HorizontalAlignment="Right">
+                <Button x:Name="ThemeButton"
+                        Click="ThemeButton_Click"
+                        Padding="12,8">
+                    <TextBlock x:Name="ThemeButtonLabel" Text="Dark mode"/>
+                </Button>
+
                 <ToggleButton x:Name="ListViewButton"
                               Click="ListViewButton_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">

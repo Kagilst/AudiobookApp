@@ -81,6 +81,13 @@ namespace AudiobookApp.Views
                     ("series.png", "Series members dialog with covers and Remove on each book.")),
 
                 new HelpSection(
+                    "Ratings",
+                    "Rate any book from 0 to 5 stars. Choose Rate from a book’s right-click menu, or from a book inside an open series. You can clear a rating later if you change your mind.\n\n" +
+                    "Individual ratings appear under each book in the library and in the series members list.\n\n" +
+                    "When you open a series, the stars under the series name are the average of every book in that series that has a rating. Unrated books are left out of the average, so a series rating only reflects books you have scored.",
+                    ("ratings.png", "Open series: combined series rating at the top, individual book ratings on each row.")),
+
+                new HelpSection(
                     "Editing books",
                     "Right-click a book (or a book row inside a series dialog) for book actions.\n\n" +
                     "• Edit — change title, author, and cover image.\n" +

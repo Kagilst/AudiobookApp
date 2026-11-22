@@ -7,34 +7,52 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    >
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
         <local:SecondsToTimeConverter x:Key="SecondsToTimeConverter" />
+        <Style x:Key="PlayerIconButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="MinHeight" Value="40"/>
+        </Style>
+        <Style x:Key="PlayerIconToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="MinHeight" Value="40"/>
+        </Style>
     </Page.Resources>
 
     <StackPanel
         HorizontalAlignment="Center"
         VerticalAlignment="Center"
-        Spacing="10">
+        Spacing="10"
+        MaxWidth="560">
+
+        <TextBlock x:Name="SeriesText"
+                   FontSize="13"
+                   Opacity="0.75"
+                   TextAlignment="Center"
+                   TextWrapping="WrapWholeWords"
+                   HorizontalAlignment="Center"
+                   Visibility="Collapsed"/>
 
         <Border Width="180"
-        Height="180"
-        CornerRadius="8"
-        HorizontalAlignment="Center"
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1">
+                Height="180"
+                CornerRadius="8"
+                HorizontalAlignment="Center"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1">
             <Grid>
                 <Image x:Name="CoverImage"
-               Stretch="UniformToFill"/>
+                       Stretch="UniformToFill"/>
                 <FontIcon x:Name="CoverPlaceholder"
-                  Glyph="&#xE8D6;"
-                  FontSize="48"
-                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                  HorizontalAlignment="Center"
-                  VerticalAlignment="Center"/>
+                          Glyph="&#xE8D6;"
+                          FontSize="48"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -66,142 +84,173 @@
         <StackPanel
             Orientation="Horizontal"
             HorizontalAlignment="Center"
-            Spacing="20">
+            Spacing="8">
 
             <Button x:Name="PreviousButton"
-                    Click="PreviousButton_Click">
-                <SymbolIcon Symbol="Previous"/>
+                    Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="PreviousButton_Click"
+                    ToolTipService.ToolTip="Previous chapter">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE892;" FontSize="16"/>
             </Button>
 
             <Button x:Name="RewindButton"
-                    MinWidth="56"
+                    Style="{StaticResource PlayerIconButtonStyle}"
                     Click="RewindButton_Click"
-                    ToolTipService.ToolTip="Skip back 10 seconds">
-                <TextBlock Text="-10s"
-                           FontWeight="SemiBold"/>
+                    ToolTipService.ToolTip="Back 10 seconds">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEB9E;" FontSize="18"/>
             </Button>
 
-            <Button
-    x:Name="PlayPauseButton"
-    Width="64"
-    Height="64"
-    Click="PlayPauseButton_Click">
-
-                <SymbolIcon
-        x:Name="PlayPauseIcon"
-        Symbol="Play"/>
+            <Button x:Name="PlayPauseButton"
+                    Width="64"
+                    Height="64"
+                    Click="PlayPauseButton_Click"
+                    ToolTipService.ToolTip="Play / Pause">
+                <FontIcon x:Name="PlayPauseIcon"
+                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          Glyph="&#xE768;"
+                          FontSize="22"/>
             </Button>
 
             <Button x:Name="FastForwardButton"
-                    MinWidth="56"
+                    Style="{StaticResource PlayerIconButtonStyle}"
                     Click="FastForwardButton_Click"
-                    ToolTipService.ToolTip="Skip forward 10 seconds">
-                <TextBlock Text="+10s"
-                           FontWeight="SemiBold"/>
+                    ToolTipService.ToolTip="Forward 10 seconds">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEB9D;" FontSize="18"/>
             </Button>
 
             <Button x:Name="NextButton"
-                    Click="NextButton_Click">
-                <SymbolIcon Symbol="Next"/>
+                    Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="NextButton_Click"
+                    ToolTipService.ToolTip="Next chapter">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE893;" FontSize="16"/>
+            </Button>
+        </StackPanel>
+
+        <StackPanel Width="500"
+                    HorizontalAlignment="Center"
+                    Spacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock x:Name="CurrentTimeText"
+                           VerticalAlignment="Center"
+                           Text="00:00:00"/>
+
+                <Slider x:Name="ProgressSlider"
+                        Grid.Column="1"
+                        Margin="10,0"
+                        Minimum="0"
+                        Maximum="100"
+                        StepFrequency="1"
+                        ValueChanged="ProgressSlider_ValueChanged"
+                        PointerPressed="ProgressSlider_PointerPressed"
+                        PointerReleased="ProgressSlider_PointerReleased"
+                        PointerCaptureLost="ProgressSlider_PointerReleased"
+                        ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
+
+                <TextBlock x:Name="TotalTimeText"
+                           Grid.Column="2"
+                           VerticalAlignment="Center"
+                           Text="00:00:00"/>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    Spacing="8">
+            <Button x:Name="VolumeButton"
+                    Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="VolumeButton_Click"
+                    ToolTipService.ToolTip="Volume">
+                <Button.Flyout>
+                    <Flyout x:Name="VolumeFlyout" Placement="Top">
+                        <StackPanel Spacing="8" Padding="8" MinWidth="72">
+                            <TextBlock x:Name="VolumeFlyoutValueText"
+                                       HorizontalAlignment="Center"
+                                       FontWeight="SemiBold"/>
+                            <Slider x:Name="VolumeSlider"
+                                    Orientation="Vertical"
+                                    Height="160"
+                                    Minimum="0"
+                                    Maximum="100"
+                                    StepFrequency="1"
+                                    IsThumbToolTipEnabled="False"
+                                    HorizontalAlignment="Center"
+                                    ValueChanged="VolumeSlider_ValueChanged"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+                <FontIcon x:Name="VolumeIcon"
+                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          Glyph="&#xE767;"
+                          FontSize="16"/>
             </Button>
 
+            <Button x:Name="SpeedButton"
+                    Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="SpeedButton_Click"
+                    ToolTipService.ToolTip="Playback speed">
+                <Button.Flyout>
+                    <Flyout x:Name="SpeedFlyout" Placement="Top">
+                        <StackPanel Spacing="8" Padding="8" MinWidth="72">
+                            <TextBlock x:Name="SpeedFlyoutValueText"
+                                       HorizontalAlignment="Center"
+                                       FontWeight="SemiBold"/>
+                            <Slider x:Name="SpeedSlider"
+                                    Orientation="Vertical"
+                                    Height="160"
+                                    Minimum="0.5"
+                                    Maximum="4.0"
+                                    StepFrequency="0.05"
+                                    TickFrequency="0.5"
+                                    IsThumbToolTipEnabled="False"
+                                    HorizontalAlignment="Center"
+                                    ValueChanged="SpeedSlider_ValueChanged"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEC4A;" FontSize="16"/>
+            </Button>
+
+            <Button x:Name="SleepButton"
+                    Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="SleepButton_Click"
+                    ToolTipService.ToolTip="Sleep timer">
+                <Button.Flyout>
+                    <MenuFlyout x:Name="SleepMenuFlyout">
+                        <MenuFlyoutItem Text="5 minutes" Click="SleepPreset_Click" Tag="5"/>
+                        <MenuFlyoutItem Text="10 minutes" Click="SleepPreset_Click" Tag="10"/>
+                        <MenuFlyoutItem Text="15 minutes" Click="SleepPreset_Click" Tag="15"/>
+                        <MenuFlyoutItem Text="30 minutes" Click="SleepPreset_Click" Tag="30"/>
+                        <MenuFlyoutItem Text="45 minutes" Click="SleepPreset_Click" Tag="45"/>
+                        <MenuFlyoutItem Text="60 minutes" Click="SleepPreset_Click" Tag="60"/>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="End of chapter" Click="SleepEndChapter_Click"/>
+                        <MenuFlyoutItem Text="Custom…" Click="SleepCustom_Click"/>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Cancel timer" Click="SleepCancel_Click"/>
+                    </MenuFlyout>
+                </Button.Flyout>
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE708;" FontSize="16"/>
+            </Button>
+
+            <ToggleButton x:Name="AutoplayButton"
+                          Style="{StaticResource PlayerIconToggleStyle}"
+                          Click="AutoplayButton_Click"
+                          ToolTipService.ToolTip="Series autoplay"
+                          Visibility="Collapsed">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8EE;" FontSize="16"/>
+            </ToggleButton>
+
+            <Button Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="ShrinkButton_Click"
+                    ToolTipService.ToolTip="Shrink to library mini player">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE73F;" FontSize="16"/>
+            </Button>
+
+            <Button Style="{StaticResource PlayerIconButtonStyle}"
+                    Click="ShrinkToMiniButton_Click"
+                    ToolTipService.ToolTip="Shrink to floating mini player">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEA60;" FontSize="16"/>
+            </Button>
         </StackPanel>
-
-        <StackPanel
-            Width="500"
-            HorizontalAlignment="Center"
-            Spacing="8">
-
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock
-            x:Name="CurrentTimeText"
-            VerticalAlignment="Center"
-            Text="00:00:00"/>
-
-                <Slider
-                x:Name="ProgressSlider"
-                Grid.Column="1"
-                Margin="10,0"
-                Minimum="0"
-                Maximum="100"
-                StepFrequency="1"
-
-                ValueChanged="ProgressSlider_ValueChanged"
-
-                PointerPressed="ProgressSlider_PointerPressed"
-                PointerReleased="ProgressSlider_PointerReleased"
-                PointerCaptureLost="ProgressSlider_PointerReleased"
-
-                ThumbToolTipValueConverter="{StaticResource SecondsToTimeConverter}"/>
-                
-
-                <TextBlock
-            x:Name="TotalTimeText"
-            Grid.Column="2"
-            VerticalAlignment="Center"
-            Text="00:00:00"/>
-            </Grid>
-
-        </StackPanel>
-
-        <StackPanel
-            Orientation="Horizontal"
-            HorizontalAlignment="Center"
-            Spacing="10">
-
-            <TextBlock Text="Speed"
-                       VerticalAlignment="Center"/>
-
-            <ComboBox x:Name="PlaybackSpeedBox"
-                      Width="90"
-                      SelectionChanged="PlaybackSpeedBox_SelectionChanged">
-
-                <ComboBoxItem Content="0.5x"/>
-                <ComboBoxItem Content="0.75x"/>
-                <ComboBoxItem Content="1.0x"/>
-                <ComboBoxItem Content="1.25x"/>
-                <ComboBoxItem Content="1.5x"/>
-                <ComboBoxItem Content="1.75x"/>
-                <ComboBoxItem Content="2.0x"/>
-                <ComboBoxItem Content="2.5x"/>
-                <ComboBoxItem Content="3.0x"/>
-                <ComboBoxItem Content="3.5x"/>
-                <ComboBoxItem Content="4.0x"/>
-
-            </ComboBox>
-
-        </StackPanel>
-
-        <Grid Width="500"
-              ColumnSpacing="12"
-              ColumnDefinitions="Auto,*,Auto">
-            <FontIcon Glyph="&#xE767;"
-                      FontSize="16"
-                      VerticalAlignment="Center"/>
-
-            <Slider x:Name="VolumeSlider"
-                    Grid.Column="1"
-                    Minimum="0"
-                    Maximum="100"
-                    Value="100"
-                    StepFrequency="1"
-                    TickFrequency="10"
-                    IsThumbToolTipEnabled="True"
-                    ValueChanged="VolumeSlider_ValueChanged"/>
-
-            <TextBlock x:Name="VolumeValueText"
-                       Grid.Column="2"
-                       Text="100"
-                       MinWidth="28"
-                       VerticalAlignment="Center"
-                       TextAlignment="Right"/>
-        </Grid>
-
     </StackPanel>
 </Page>

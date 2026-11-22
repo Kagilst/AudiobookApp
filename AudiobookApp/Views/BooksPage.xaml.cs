@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using AudiobookApp.Models;
+using AudiobookApp.Services;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.UI;
@@ -51,6 +52,28 @@ namespace AudiobookApp.Views
             BooksList.ItemsSource = _displayItems;
             BooksGrid.ItemsSource = _displayItems;
             SetDisplayMode(useIconView: true);
+
+            Loaded += (_, _) =>
+            {
+                AppThemeService.ThemeChanged -= UpdateThemeButtonLabel;
+                AppThemeService.ThemeChanged += UpdateThemeButtonLabel;
+                UpdateThemeButtonLabel();
+            };
+            Unloaded += (_, _) => AppThemeService.ThemeChanged -= UpdateThemeButtonLabel;
+        }
+
+        private void ThemeButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.MainWindow is not Window window)
+                return;
+
+            AppThemeService.Toggle(window);
+            UpdateThemeButtonLabel();
+        }
+
+        private void UpdateThemeButtonLabel()
+        {
+            ThemeButtonLabel.Text = AppThemeService.ToggleButtonLabel(App.MainWindow);
         }
 
         public event EventHandler? ImportRequested;

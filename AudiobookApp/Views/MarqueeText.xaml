@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="AudiobookApp.Views.MarqueeText"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    SizeChanged="UserControl_SizeChanged">
+
+    <Canvas x:Name="Viewport" Height="16">
+        <Canvas.Clip>
+            <RectangleGeometry x:Name="ClipGeometry"/>
+        </Canvas.Clip>
+
+        <TextBlock x:Name="PrimaryText"
+                   TextWrapping="NoWrap"
+                   SizeChanged="Text_SizeChanged">
+            <TextBlock.RenderTransform>
+                <TranslateTransform x:Name="PrimaryTranslate"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+        <TextBlock x:Name="SecondaryText"
+                   TextWrapping="NoWrap"
+                   Visibility="Collapsed">
+            <TextBlock.RenderTransform>
+                <TranslateTransform x:Name="SecondaryTranslate"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+    </Canvas>
+</UserControl>

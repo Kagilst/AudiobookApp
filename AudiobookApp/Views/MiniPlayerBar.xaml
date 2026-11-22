@@ -7,13 +7,23 @@
 
     <UserControl.Resources>
         <local:SecondsToTimeConverter x:Key="SecondsToTimeConverter" />
+        <Style x:Key="MiniIconButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinWidth" Value="36"/>
+            <Setter Property="MinHeight" Value="32"/>
+        </Style>
+        <Style x:Key="MiniIconToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinWidth" Value="36"/>
+            <Setter Property="MinHeight" Value="32"/>
+        </Style>
     </UserControl.Resources>
 
     <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0"
             Padding="12,8">
-        <Grid RowDefinitions="Auto,Auto,Auto"
+        <Grid RowDefinitions="Auto,Auto"
               RowSpacing="6">
 
             <Grid ColumnDefinitions="Auto,*,Auto"
@@ -36,6 +46,11 @@
                 <StackPanel Grid.Column="1"
                             VerticalAlignment="Center"
                             Spacing="2">
+                    <TextBlock x:Name="SeriesText"
+                               FontSize="11"
+                               Opacity="0.75"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="Collapsed"/>
                     <TextBlock x:Name="TitleText"
                                FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis"/>
@@ -48,23 +63,158 @@
 
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
-                            Spacing="4"
+                            Spacing="0"
                             VerticalAlignment="Center">
-                    <Button Click="PreviousButton_Click" Padding="8,4">
-                        <SymbolIcon Symbol="Previous"/>
-                    </Button>
-                    <Button Click="RewindButton_Click" Padding="8,4" Content="-10s"/>
-                    <Button Click="PlayPauseButton_Click" Padding="10,4">
-                        <SymbolIcon x:Name="PlayPauseIcon" Symbol="Play"/>
-                    </Button>
-                    <Button Click="FastForwardButton_Click" Padding="8,4" Content="+10s"/>
-                    <Button Click="NextButton_Click" Padding="8,4">
-                        <SymbolIcon Symbol="Next"/>
-                    </Button>
-                    <Button Content="Expand" Click="ExpandButton_Click" Padding="10,4"/>
-                    <Button Click="CloseButton_Click" Padding="8,4" ToolTipService.ToolTip="Close mini player">
-                        <SymbolIcon Symbol="Cancel"/>
-                    </Button>
+                    <!-- Transport -->
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="PreviousButton_Click"
+                                ToolTipService.ToolTip="Previous chapter">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE892;" FontSize="14"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="RewindButton_Click"
+                                ToolTipService.ToolTip="Back 10 seconds">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEB9E;" FontSize="16"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="PlayPauseButton_Click"
+                                ToolTipService.ToolTip="Play / Pause">
+                            <FontIcon x:Name="PlayPauseIcon"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE768;"
+                                      FontSize="14"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="FastForwardButton_Click"
+                                ToolTipService.ToolTip="Forward 10 seconds">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEB9D;" FontSize="16"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="NextButton_Click"
+                                ToolTipService.ToolTip="Next chapter">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE893;" FontSize="14"/>
+                        </Button>
+                    </StackPanel>
+
+                    <Border Width="1"
+                            Margin="8,4"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            VerticalAlignment="Stretch"/>
+
+                    <!-- Volume / speed / sleep / autoplay -->
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button x:Name="VolumeButton"
+                                Style="{StaticResource MiniIconButtonStyle}"
+                                Click="VolumeButton_Click"
+                                ToolTipService.ToolTip="Volume">
+                            <Button.Flyout>
+                                <Flyout Placement="Top"
+                                        ShouldConstrainToRootBounds="False">
+                                    <StackPanel Spacing="8" Padding="8" MinWidth="64">
+                                        <TextBlock x:Name="VolumeFlyoutValueText"
+                                                   HorizontalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="12"/>
+                                        <Slider x:Name="VolumeSlider"
+                                                Orientation="Vertical"
+                                                Height="140"
+                                                Minimum="0"
+                                                Maximum="100"
+                                                StepFrequency="1"
+                                                IsThumbToolTipEnabled="False"
+                                                HorizontalAlignment="Center"
+                                                ValueChanged="VolumeSlider_ValueChanged"/>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                            <FontIcon x:Name="VolumeIcon"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE767;"
+                                      FontSize="14"/>
+                        </Button>
+
+                        <Button x:Name="SpeedButton"
+                                Style="{StaticResource MiniIconButtonStyle}"
+                                Click="SpeedButton_Click"
+                                ToolTipService.ToolTip="Playback speed">
+                            <Button.Flyout>
+                                <Flyout Placement="Top"
+                                        ShouldConstrainToRootBounds="False">
+                                    <StackPanel Spacing="8" Padding="8" MinWidth="64">
+                                        <TextBlock x:Name="SpeedFlyoutValueText"
+                                                   HorizontalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="12"/>
+                                        <Slider x:Name="SpeedSlider"
+                                                Orientation="Vertical"
+                                                Height="140"
+                                                Minimum="0.5"
+                                                Maximum="4.0"
+                                                StepFrequency="0.05"
+                                                IsThumbToolTipEnabled="False"
+                                                HorizontalAlignment="Center"
+                                                ValueChanged="SpeedSlider_ValueChanged"/>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEC4A;" FontSize="14"/>
+                        </Button>
+
+                        <Button x:Name="SleepButton"
+                                Style="{StaticResource MiniIconButtonStyle}"
+                                Click="SleepButton_Click"
+                                ToolTipService.ToolTip="Sleep timer">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="5 minutes" Click="SleepPreset_Click" Tag="5"/>
+                                    <MenuFlyoutItem Text="10 minutes" Click="SleepPreset_Click" Tag="10"/>
+                                    <MenuFlyoutItem Text="15 minutes" Click="SleepPreset_Click" Tag="15"/>
+                                    <MenuFlyoutItem Text="30 minutes" Click="SleepPreset_Click" Tag="30"/>
+                                    <MenuFlyoutItem Text="45 minutes" Click="SleepPreset_Click" Tag="45"/>
+                                    <MenuFlyoutItem Text="60 minutes" Click="SleepPreset_Click" Tag="60"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem Text="End of chapter" Click="SleepEndChapter_Click"/>
+                                    <MenuFlyoutItem Text="Custom…" Click="SleepCustom_Click"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem Text="Cancel timer" Click="SleepCancel_Click"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE708;" FontSize="14"/>
+                        </Button>
+
+                        <ToggleButton x:Name="AutoplayButton"
+                                      Style="{StaticResource MiniIconToggleStyle}"
+                                      Click="AutoplayButton_Click"
+                                      ToolTipService.ToolTip="Series autoplay"
+                                      Visibility="Collapsed">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8EE;" FontSize="14"/>
+                        </ToggleButton>
+                    </StackPanel>
+
+                    <Border Width="1"
+                            Margin="8,4"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            VerticalAlignment="Stretch"/>
+
+                    <!-- Expand / collapse / close -->
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="ExpandButton_Click"
+                                ToolTipService.ToolTip="Open full player">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE740;" FontSize="14"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="CollapseButton_Click"
+                                ToolTipService.ToolTip="Collapse to floating mini player">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEA60;" FontSize="14"/>
+                        </Button>
+                        <Button Style="{StaticResource MiniIconButtonStyle}"
+                                Click="CloseButton_Click"
+                                ToolTipService.ToolTip="Close mini player">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE711;" FontSize="14"/>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
 
@@ -90,48 +240,6 @@
                            VerticalAlignment="Center"
                            FontSize="12"
                            Text="00:00"/>
-            </Grid>
-
-            <Grid Grid.Row="2"
-                  ColumnDefinitions="Auto,Auto,*,Auto,*,Auto"
-                  ColumnSpacing="8">
-                <TextBlock Text="Speed"
-                           VerticalAlignment="Center"
-                           FontSize="12"/>
-                <ComboBox x:Name="PlaybackSpeedBox"
-                          Grid.Column="1"
-                          Width="78"
-                          SelectionChanged="PlaybackSpeedBox_SelectionChanged">
-                    <ComboBoxItem Content="0.5x"/>
-                    <ComboBoxItem Content="0.75x"/>
-                    <ComboBoxItem Content="1.0x"/>
-                    <ComboBoxItem Content="1.25x"/>
-                    <ComboBoxItem Content="1.5x"/>
-                    <ComboBoxItem Content="1.75x"/>
-                    <ComboBoxItem Content="2.0x"/>
-                    <ComboBoxItem Content="2.5x"/>
-                    <ComboBoxItem Content="3.0x"/>
-                    <ComboBoxItem Content="3.5x"/>
-                    <ComboBoxItem Content="4.0x"/>
-                </ComboBox>
-
-                <FontIcon Grid.Column="3"
-                          Glyph="&#xE767;"
-                          FontSize="14"
-                          VerticalAlignment="Center"/>
-                <Slider x:Name="VolumeSlider"
-                        Grid.Column="4"
-                        Minimum="0"
-                        Maximum="100"
-                        Value="100"
-                        StepFrequency="1"
-                        ValueChanged="VolumeSlider_ValueChanged"/>
-                <TextBlock x:Name="VolumeValueText"
-                           Grid.Column="5"
-                           Text="100"
-                           FontSize="12"
-                           VerticalAlignment="Center"
-                           MinWidth="24"/>
             </Grid>
         </Grid>
     </Border>

@@ -1,9 +1,11 @@
 using System;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using AudiobookApp.Models;
 using AudiobookApp.Services;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
@@ -13,6 +15,7 @@ namespace AudiobookApp.Views
     public sealed partial class MiniPlayerBar : UserControl
     {
         private PlaybackService? _playback;
+        private Func<Book?, string?>? _seriesLabelProvider;
         private readonly DispatcherTimer _timer = new();
         private bool _isDraggingSlider;
         private bool _updatingFromTimer;
@@ -20,12 +23,12 @@ namespace AudiobookApp.Views
         private int _currentChapterIndex = -1;
 
         public event Action? ExpandRequested;
+        public event Action? CollapseRequested;
         public event Action? CloseRequested;
 
         public MiniPlayerBar()
         {
             InitializeComponent();
-            PlaybackSpeedBox.SelectedIndex = 2;
 
             _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += Timer_Tick;
@@ -38,15 +41,43 @@ namespace AudiobookApp.Views
             };
         }
 
-        public void Attach(PlaybackService playback)
+        public void Attach(PlaybackService playback, Func<Book?, string?>? seriesLabelProvider = null)
         {
             if (_playback != null)
                 _playback.StateChanged -= Playback_StateChanged;
 
             _playback = playback;
+            _seriesLabelProvider = seriesLabelProvider;
             _playback.StateChanged += Playback_StateChanged;
             SyncFromService();
             _ = LoadCoverAsync();
+        }
+
+        public void RefreshSeriesLabel()
+        {
+            if (_playback?.CurrentBook == null)
+                return;
+
+            var label = _seriesLabelProvider?.Invoke(_playback.CurrentBook);
+            SetSeriesContext(!string.IsNullOrWhiteSpace(label), label);
+        }
+
+        private void SetSeriesContext(bool isInSeries, string? label)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                SeriesText.Visibility = Visibility.Collapsed;
+                SeriesText.Text = string.Empty;
+            }
+            else
+            {
+                SeriesText.Text = label;
+                SeriesText.Visibility = Visibility.Visible;
+            }
+
+            AutoplayButton.Visibility = isInSeries ? Visibility.Visible : Visibility.Collapsed;
+            if (_playback != null)
+                AutoplayButton.IsChecked = _playback.SeriesAutoplayEnabled;
         }
 
         private void Playback_StateChanged()
@@ -66,18 +97,35 @@ namespace AudiobookApp.Views
             _updatingFromService = true;
 
             TitleText.Text = _playback.CurrentBook.Title;
-            PlayPauseIcon.Symbol = _playback.IsPlaying ? Symbol.Pause : Symbol.Play;
+            PlayPauseIcon.Glyph = _playback.IsPlaying ? "\uE769" : "\uE768";
 
-            if (PlaybackSpeedBox.SelectedIndex != _playback.SpeedIndex)
-                PlaybackSpeedBox.SelectedIndex = _playback.SpeedIndex;
+            if (Math.Abs(SpeedSlider.Value - _playback.Speed) > 0.01)
+                SpeedSlider.Value = _playback.Speed;
 
             if (Math.Abs(VolumeSlider.Value - _playback.VolumePercent) > 0.1)
                 VolumeSlider.Value = _playback.VolumePercent;
 
-            VolumeValueText.Text = ((int)_playback.VolumePercent).ToString();
+            UpdateControlLabels();
+
+            var seriesLabel = _seriesLabelProvider?.Invoke(_playback.CurrentBook);
+            SetSeriesContext(!string.IsNullOrWhiteSpace(seriesLabel), seriesLabel);
 
             _updatingFromService = false;
             UpdateTimeDisplay();
+        }
+
+        private void UpdateControlLabels()
+        {
+            if (_playback == null)
+                return;
+
+            SpeedFlyoutValueText.Text = $"{_playback.Speed:0.##}x";
+            VolumeFlyoutValueText.Text = $"{(int)Math.Round(_playback.VolumePercent)}%";
+            ToolTipService.SetToolTip(SpeedButton, $"Speed {_playback.Speed:0.##}x");
+            ToolTipService.SetToolTip(VolumeButton, $"Volume {(int)Math.Round(_playback.VolumePercent)}%");
+            ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+            VolumeIcon.Glyph = _playback.VolumePercent <= 0.5 ? "\uE74F" : "\uE767";
+            AutoplayButton.IsChecked = _playback.SeriesAutoplayEnabled;
         }
 
         private async System.Threading.Tasks.Task LoadCoverAsync()
@@ -105,7 +153,13 @@ namespace AudiobookApp.Views
             }
         }
 
-        private void Timer_Tick(object? sender, object e) => UpdateTimeDisplay();
+        private void Timer_Tick(object? sender, object e)
+        {
+            _playback?.CheckForBookEnd();
+            UpdateTimeDisplay();
+            if (_playback?.IsSleepTimerActive == true)
+                ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
 
         private void UpdateTimeDisplay()
         {
@@ -203,6 +257,8 @@ namespace AudiobookApp.Views
 
         private void ExpandButton_Click(object sender, RoutedEventArgs e) => ExpandRequested?.Invoke();
 
+        private void CollapseButton_Click(object sender, RoutedEventArgs e) => CollapseRequested?.Invoke();
+
         private void CloseButton_Click(object sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 
         private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e) => _isDraggingSlider = true;
@@ -224,23 +280,182 @@ namespace AudiobookApp.Views
             _playback?.SeekTo(GetAbsoluteFromSlider());
         }
 
-        private void PlaybackSpeedBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void SpeedButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_playback == null)
+                return;
+
+            _updatingFromService = true;
+            SpeedSlider.Value = _playback.Speed;
+            SpeedFlyoutValueText.Text = $"{_playback.Speed:0.##}x";
+            _updatingFromService = false;
+        }
+
+        private void VolumeButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null)
+                return;
+
+            _updatingFromService = true;
+            VolumeSlider.Value = _playback.VolumePercent;
+            VolumeFlyoutValueText.Text = $"{(int)Math.Round(_playback.VolumePercent)}%";
+            _updatingFromService = false;
+        }
+
+        private void SpeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (SpeedFlyoutValueText != null)
+                SpeedFlyoutValueText.Text = $"{e.NewValue:0.##}x";
+
             if (_updatingFromService || _playback == null)
                 return;
 
-            _playback.SetSpeedIndex(PlaybackSpeedBox.SelectedIndex);
+            _playback.SetSpeed(e.NewValue);
+            ToolTipService.SetToolTip(SpeedButton, $"Speed {_playback.Speed:0.##}x");
         }
 
         private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (VolumeValueText != null)
-                VolumeValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
+            if (VolumeFlyoutValueText != null)
+                VolumeFlyoutValueText.Text = $"{(int)Math.Round(e.NewValue)}%";
 
             if (_updatingFromService || _playback == null)
                 return;
 
             _playback.VolumePercent = e.NewValue;
+            ToolTipService.SetToolTip(VolumeButton, $"Volume {(int)Math.Round(e.NewValue)}%");
+            VolumeIcon.Glyph = e.NewValue <= 0.5 ? "\uE74F" : "\uE767";
+        }
+
+        private void SleepButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback != null)
+                ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
+
+        private void SleepPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null)
+                return;
+
+            if (sender is not MenuFlyoutItem { Tag: string tag } || !int.TryParse(tag, out var minutes))
+                return;
+
+            _playback.StartSleepTimerMinutes(minutes);
+            ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
+
+        private void SleepEndChapter_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null)
+                return;
+
+            _playback.StartSleepTimerEndOfChapter();
+            ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
+
+        private async void SleepCustom_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null || XamlRoot == null)
+                return;
+
+            var minutesBox = CreateDigitsOnlyBox("Minutes", "20");
+            var chaptersBox = CreateDigitsOnlyBox("Chapters", "1");
+            chaptersBox.Visibility = Visibility.Collapsed;
+
+            var modeCombo = new ComboBox
+            {
+                Header = "Custom type",
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            modeCombo.Items.Add("Minutes");
+            modeCombo.Items.Add("Chapters");
+            modeCombo.SelectedIndex = 0;
+            modeCombo.SelectionChanged += (_, _) =>
+            {
+                var useChapters = modeCombo.SelectedIndex == 1;
+                minutesBox.Visibility = useChapters ? Visibility.Collapsed : Visibility.Visible;
+                chaptersBox.Visibility = useChapters ? Visibility.Visible : Visibility.Collapsed;
+            };
+
+            var panel = new StackPanel { Spacing = 12 };
+            panel.Children.Add(modeCombo);
+            panel.Children.Add(minutesBox);
+            panel.Children.Add(chaptersBox);
+
+            var dialog = new ContentDialog
+            {
+                Title = "Custom sleep timer",
+                PrimaryButtonText = "Start",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                Content = panel,
+                XamlRoot = XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+                return;
+
+            if (modeCombo.SelectedIndex == 1)
+            {
+                if (!TryParsePositiveInt(chaptersBox.Text, out var chapters))
+                    return;
+
+                _playback.StartSleepTimerChapters(Math.Clamp(chapters, 1, 500));
+            }
+            else
+            {
+                if (!TryParsePositiveInt(minutesBox.Text, out var minutes))
+                    return;
+
+                _playback.StartSleepTimerMinutes(Math.Clamp(minutes, 1, 24 * 60));
+            }
+
+            ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
+
+        private static TextBox CreateDigitsOnlyBox(string header, string initial)
+        {
+            var box = new TextBox
+            {
+                Header = header,
+                Text = initial,
+                InputScope = new InputScope
+                {
+                    Names = { new InputScopeName(InputScopeNameValue.Number) }
+                }
+            };
+
+            box.BeforeTextChanging += (_, args) =>
+            {
+                args.Cancel = args.NewText.Length > 0 && !args.NewText.All(char.IsDigit);
+            };
+
+            return box;
+        }
+
+        private static bool TryParsePositiveInt(string? text, out int value)
+        {
+            value = 0;
+            return !string.IsNullOrWhiteSpace(text) && int.TryParse(text.Trim(), out value) && value > 0;
+        }
+
+        private void SleepCancel_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null)
+                return;
+
+            _playback.CancelSleepTimer();
+            ToolTipService.SetToolTip(SleepButton, _playback.GetSleepTimerButtonLabel());
+        }
+
+        private void AutoplayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playback == null)
+                return;
+
+            _playback.SeriesAutoplayEnabled = AutoplayButton.IsChecked == true;
         }
 
         private static string FormatTime(TimeSpan time)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ATL;
 using AudiobookApp.Models;
+using Microsoft.UI.Dispatching;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage;
@@ -26,8 +27,20 @@ namespace AudiobookApp.Services
         public TimeSpan Duration => End - Start;
     }
 
+    public enum SleepTimerMode
+    {
+        Off,
+        Minutes,
+        EndOfChapter,
+        Chapters
+    }
+
     public sealed class PlaybackService
     {
+        private const string AutoplaySettingKey = "SeriesAutoplayEnabled";
+        private const double MinSpeed = 0.5;
+        private const double MaxSpeed = 4.0;
+
         private static readonly double[] SpeedOptions =
         {
             0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0
@@ -36,12 +49,33 @@ namespace AudiobookApp.Services
         private readonly List<ChapterMarker> _chapters = new();
         private readonly List<TimeSpan> _partDurations = new();
         private readonly List<TimeSpan> _partStarts = new();
+        private readonly DispatcherQueueTimer _sleepTimer;
+
         private MediaPlayer? _player;
         private MediaPlaybackList? _playbackList;
         private bool _sourceLoaded;
         private double _volumePercent = 100;
+        private double _speed = 1.0;
         private Book? _pendingOpenBook;
         private TimeSpan _totalDuration;
+        private bool _seriesAutoplayEnabled;
+        private bool _bookFinishedRaised;
+
+        private SleepTimerMode _sleepMode = SleepTimerMode.Off;
+        private DateTimeOffset? _sleepDeadlineUtc;
+        private TimeSpan _sleepRemainingWhenPaused = TimeSpan.Zero;
+        private TimeSpan? _sleepTargetPosition;
+        private int _sleepChaptersRemaining;
+        private int _sleepLastChapterIndex = -1;
+
+        public PlaybackService()
+        {
+            _seriesAutoplayEnabled = ReadAutoplayPreference();
+            _sleepTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _sleepTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _sleepTimer.IsRepeating = true;
+            _sleepTimer.Tick += (_, _) => TickSleepTimer();
+        }
 
         public MediaPlayer Player => EnsurePlayer();
 
@@ -80,12 +114,49 @@ namespace AudiobookApp.Services
             }
         }
 
-        public int SpeedIndex { get; private set; } = 2;
+        public int SpeedIndex
+        {
+            get
+            {
+                var best = 0;
+                var bestDelta = double.MaxValue;
+                for (var i = 0; i < SpeedOptions.Length; i++)
+                {
+                    var delta = Math.Abs(SpeedOptions[i] - _speed);
+                    if (delta < bestDelta)
+                    {
+                        bestDelta = delta;
+                        best = i;
+                    }
+                }
 
-        public double Speed => SpeedOptions[Math.Clamp(SpeedIndex, 0, SpeedOptions.Length - 1)];
+                return best;
+            }
+        }
+
+        public double Speed => _speed;
+
+        public bool SeriesAutoplayEnabled
+        {
+            get => _seriesAutoplayEnabled;
+            set
+            {
+                if (_seriesAutoplayEnabled == value)
+                    return;
+
+                _seriesAutoplayEnabled = value;
+                SaveAutoplayPreference(value);
+                StateChanged?.Invoke();
+            }
+        }
+
+        public SleepTimerMode SleepMode => _sleepMode;
+
+        public bool IsSleepTimerActive => _sleepMode != SleepTimerMode.Off;
 
         public event Action? StateChanged;
         public event Action<Book>? PlaybackPersisted;
+        public event Action<Book>? BookFinished;
 
         public async Task OpenBookAsync(Book book, bool autoPlay = false)
         {
@@ -106,10 +177,16 @@ namespace AudiobookApp.Services
             if (CurrentBook != null && !isSameBook)
                 PersistPlaybackState();
 
+            CancelSleepTimer(raiseState: false);
+            _bookFinishedRaised = false;
+
             var player = EnsurePlayer();
             CurrentBook = book;
             IsPlaying = false;
             player.Pause();
+
+            if (book.PlaybackSpeed >= MinSpeed && book.PlaybackSpeed <= MaxSpeed)
+                _speed = book.PlaybackSpeed;
 
             await PrepareTimelineAsync(book);
             LoadChapters(book);
@@ -126,6 +203,13 @@ namespace AudiobookApp.Services
             if (CurrentBook == null || !_sourceLoaded)
                 return;
 
+            if (_sleepMode == SleepTimerMode.Minutes && _sleepRemainingWhenPaused > TimeSpan.Zero)
+            {
+                _sleepDeadlineUtc = DateTimeOffset.UtcNow + _sleepRemainingWhenPaused;
+                _sleepRemainingWhenPaused = TimeSpan.Zero;
+                EnsureSleepTimerRunning();
+            }
+
             Player.Play();
             IsPlaying = true;
             StateChanged?.Invoke();
@@ -135,6 +219,14 @@ namespace AudiobookApp.Services
         {
             if (_player == null)
                 return;
+
+            if (_sleepMode == SleepTimerMode.Minutes && _sleepDeadlineUtc is DateTimeOffset deadline)
+            {
+                _sleepRemainingWhenPaused = deadline - DateTimeOffset.UtcNow;
+                if (_sleepRemainingWhenPaused < TimeSpan.Zero)
+                    _sleepRemainingWhenPaused = TimeSpan.Zero;
+                _sleepDeadlineUtc = null;
+            }
 
             _player.Pause();
             IsPlaying = false;
@@ -153,19 +245,25 @@ namespace AudiobookApp.Services
         public void SetSpeedIndex(int index)
         {
             var next = Math.Clamp(index, 0, SpeedOptions.Length - 1);
-            if (next == SpeedIndex && _player != null)
+            SetSpeed(SpeedOptions[next]);
+        }
+
+        public void SetSpeed(double rate)
+        {
+            var next = Math.Clamp(Math.Round(rate * 20) / 20.0, MinSpeed, MaxSpeed);
+            if (Math.Abs(next - _speed) < 0.001 && _player != null)
             {
-                _player.PlaybackSession.PlaybackRate = Speed;
+                _player.PlaybackSession.PlaybackRate = _speed;
                 return;
             }
 
-            SpeedIndex = next;
+            _speed = next;
 
             if (_player != null)
-                _player.PlaybackSession.PlaybackRate = Speed;
+                _player.PlaybackSession.PlaybackRate = _speed;
 
             if (CurrentBook != null)
-                CurrentBook.PlaybackSpeed = Speed;
+                CurrentBook.PlaybackSpeed = _speed;
 
             StateChanged?.Invoke();
         }
@@ -303,6 +401,244 @@ namespace AudiobookApp.Services
             PlaybackPersisted?.Invoke(CurrentBook);
         }
 
+        public void StartSleepTimerMinutes(int minutes)
+        {
+            if (minutes <= 0)
+            {
+                CancelSleepTimer();
+                return;
+            }
+
+            var remainingBook = GetRemainingBookTime();
+            var requested = TimeSpan.FromMinutes(minutes);
+            if (remainingBook > TimeSpan.Zero && requested > remainingBook)
+                requested = remainingBook;
+
+            _sleepMode = SleepTimerMode.Minutes;
+            _sleepTargetPosition = null;
+            _sleepChaptersRemaining = 0;
+            _sleepLastChapterIndex = -1;
+            _sleepRemainingWhenPaused = TimeSpan.Zero;
+
+            if (IsPlaying)
+            {
+                _sleepDeadlineUtc = DateTimeOffset.UtcNow + requested;
+            }
+            else
+            {
+                _sleepDeadlineUtc = null;
+                _sleepRemainingWhenPaused = requested;
+            }
+
+            EnsureSleepTimerRunning();
+            StateChanged?.Invoke();
+        }
+
+        public void StartSleepTimerEndOfChapter()
+        {
+            var position = GetAbsolutePosition();
+            TimeSpan target;
+
+            if (HasChapters)
+            {
+                var index = FindChapterIndex(position);
+                target = _chapters[index].End;
+            }
+            else
+            {
+                target = TotalDuration > TimeSpan.Zero ? TotalDuration : position;
+            }
+
+            if (TotalDuration > TimeSpan.Zero && target > TotalDuration)
+                target = TotalDuration;
+
+            ArmPositionSleep(SleepTimerMode.EndOfChapter, target);
+        }
+
+        public void StartSleepTimerChapters(int chapterCount)
+        {
+            if (chapterCount <= 0)
+            {
+                CancelSleepTimer();
+                return;
+            }
+
+            if (!HasChapters)
+            {
+                // No chapter markers — treat as end of book.
+                ArmPositionSleep(SleepTimerMode.Chapters, TotalDuration > TimeSpan.Zero
+                    ? TotalDuration
+                    : GetAbsolutePosition());
+                return;
+            }
+
+            var position = GetAbsolutePosition();
+            var currentIndex = FindChapterIndex(position);
+            var targetIndex = Math.Min(currentIndex + chapterCount - 1, _chapters.Count - 1);
+            var target = _chapters[targetIndex].End;
+            if (TotalDuration > TimeSpan.Zero && target > TotalDuration)
+                target = TotalDuration;
+
+            _sleepMode = SleepTimerMode.Chapters;
+            _sleepDeadlineUtc = null;
+            _sleepRemainingWhenPaused = TimeSpan.Zero;
+            _sleepTargetPosition = target;
+            _sleepChaptersRemaining = chapterCount;
+            _sleepLastChapterIndex = currentIndex;
+            EnsureSleepTimerRunning();
+            StateChanged?.Invoke();
+        }
+
+        public void CancelSleepTimer(bool raiseState = true)
+        {
+            _sleepMode = SleepTimerMode.Off;
+            _sleepDeadlineUtc = null;
+            _sleepRemainingWhenPaused = TimeSpan.Zero;
+            _sleepTargetPosition = null;
+            _sleepChaptersRemaining = 0;
+            _sleepLastChapterIndex = -1;
+            _sleepTimer.Stop();
+
+            if (raiseState)
+                StateChanged?.Invoke();
+        }
+
+        public string GetSleepTimerButtonLabel()
+        {
+            if (_sleepMode == SleepTimerMode.Off)
+                return "Sleep";
+
+            if (_sleepMode == SleepTimerMode.Minutes)
+            {
+                var remaining = GetSleepMinutesRemaining();
+                if (remaining <= TimeSpan.Zero)
+                    return "Sleep";
+
+                return remaining.TotalHours >= 1
+                    ? $"Sleep {remaining:h\\:mm\\:ss}"
+                    : $"Sleep {remaining:mm\\:ss}";
+            }
+
+            if (_sleepMode == SleepTimerMode.EndOfChapter)
+                return "Sleep · End ch";
+
+            if (_sleepMode == SleepTimerMode.Chapters)
+                return _sleepChaptersRemaining > 0
+                    ? $"Sleep · {_sleepChaptersRemaining} ch"
+                    : "Sleep · Ch";
+
+            return "Sleep";
+        }
+
+        public TimeSpan GetSleepMinutesRemaining()
+        {
+            if (_sleepMode != SleepTimerMode.Minutes)
+                return TimeSpan.Zero;
+
+            if (_sleepDeadlineUtc is DateTimeOffset deadline)
+            {
+                var remaining = deadline - DateTimeOffset.UtcNow;
+                return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+            }
+
+            return _sleepRemainingWhenPaused > TimeSpan.Zero
+                ? _sleepRemainingWhenPaused
+                : TimeSpan.Zero;
+        }
+
+        private void ArmPositionSleep(SleepTimerMode mode, TimeSpan targetPosition)
+        {
+            _sleepMode = mode;
+            _sleepDeadlineUtc = null;
+            _sleepRemainingWhenPaused = TimeSpan.Zero;
+            _sleepTargetPosition = targetPosition;
+            _sleepChaptersRemaining = 0;
+            _sleepLastChapterIndex = HasChapters ? FindChapterIndex(GetAbsolutePosition()) : -1;
+            EnsureSleepTimerRunning();
+            StateChanged?.Invoke();
+        }
+
+        private TimeSpan GetRemainingBookTime()
+        {
+            var total = TotalDuration;
+            if (total <= TimeSpan.Zero)
+                return TimeSpan.Zero;
+
+            var remaining = total - GetAbsolutePosition();
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        }
+
+        private void EnsureSleepTimerRunning()
+        {
+            if (_sleepMode == SleepTimerMode.Off)
+            {
+                _sleepTimer.Stop();
+                return;
+            }
+
+            if (!_sleepTimer.IsRunning)
+                _sleepTimer.Start();
+        }
+
+        private void TickSleepTimer()
+        {
+            if (_sleepMode == SleepTimerMode.Off)
+            {
+                _sleepTimer.Stop();
+                return;
+            }
+
+            if (_sleepMode == SleepTimerMode.Minutes)
+            {
+                if (!IsPlaying)
+                {
+                    StateChanged?.Invoke();
+                    return;
+                }
+
+                if (GetSleepMinutesRemaining() <= TimeSpan.Zero)
+                {
+                    TriggerSleepStop();
+                    return;
+                }
+
+                StateChanged?.Invoke();
+                return;
+            }
+
+            if (_sleepTargetPosition is not TimeSpan target)
+                return;
+
+            var position = GetAbsolutePosition();
+
+            if (_sleepMode == SleepTimerMode.Chapters && HasChapters)
+            {
+                var index = FindChapterIndex(position);
+                if (_sleepLastChapterIndex >= 0 && index > _sleepLastChapterIndex)
+                {
+                    var crossed = index - _sleepLastChapterIndex;
+                    _sleepChaptersRemaining = Math.Max(0, _sleepChaptersRemaining - crossed);
+                    _sleepLastChapterIndex = index;
+                    StateChanged?.Invoke();
+                }
+            }
+
+            if (position >= target - TimeSpan.FromMilliseconds(250)
+                || (TotalDuration > TimeSpan.Zero && position >= TotalDuration - TimeSpan.FromMilliseconds(250)))
+            {
+                TriggerSleepStop();
+            }
+        }
+
+        private void TriggerSleepStop()
+        {
+            CancelSleepTimer(raiseState: false);
+            if (IsPlaying)
+                Pause();
+            else
+                StateChanged?.Invoke();
+        }
+
         private MediaPlayer EnsurePlayer()
         {
             if (_player != null)
@@ -314,7 +650,66 @@ namespace AudiobookApp.Services
                 Volume = _volumePercent / 100.0
             };
 
+            _player.MediaEnded += Player_MediaEnded;
+            _player.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
+
             return _player;
+        }
+
+        private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
+        {
+            if (sender.PlaybackState == MediaPlaybackState.Paused && IsPlaying)
+            {
+                // External pause (e.g. end of list item) — sync flag if truly stopped at end.
+            }
+        }
+
+        private void Player_MediaEnded(MediaPlayer sender, object args)
+        {
+            // Single-source books end here. Multi-file lists use CurrentItemChanged / last item end.
+            if (_playbackList != null)
+                return;
+
+            RaiseBookFinishedIfNeeded();
+        }
+
+        private void RaiseBookFinishedIfNeeded()
+        {
+            if (_bookFinishedRaised || CurrentBook == null)
+                return;
+
+            var position = GetAbsolutePosition();
+            var total = TotalDuration;
+            if (total > TimeSpan.Zero && position < total - TimeSpan.FromSeconds(1.5))
+                return;
+
+            _bookFinishedRaised = true;
+            IsPlaying = false;
+            CancelSleepTimer(raiseState: false);
+
+            if (total > TimeSpan.Zero)
+                CurrentBook.LastPositionSeconds = total.TotalSeconds;
+
+            PersistPlaybackState();
+            var finished = CurrentBook;
+            StateChanged?.Invoke();
+            BookFinished?.Invoke(finished);
+        }
+
+        private void OnPlaybackListItemChanged(MediaPlaybackList sender, CurrentMediaPlaybackItemChangedEventArgs args)
+        {
+            // When moving past the last item, CurrentItem may become null / index wraps.
+            if (_playbackList == null || CurrentBook == null)
+                return;
+
+            var index = (int)_playbackList.CurrentItemIndex;
+            if (index < 0 || index >= _playbackList.Items.Count - 1)
+            {
+                // Last item finishing is handled via MediaPlayer.MediaEnded when list completes —
+                // also check absolute position near end.
+            }
+
+            StateChanged?.Invoke();
         }
 
         private async Task PrepareTimelineAsync(Book book)
@@ -392,6 +787,7 @@ namespace AudiobookApp.Services
                         list.Items.Add(new MediaPlaybackItem(source));
                     }
 
+                    list.CurrentItemChanged += OnPlaybackListItemChanged;
                     _playbackList = list;
                     player.Source = list;
                 }
@@ -435,6 +831,11 @@ namespace AudiobookApp.Services
             if (book != null && book.LastPositionSeconds > 0)
                 SeekTo(TimeSpan.FromSeconds(book.LastPositionSeconds));
 
+            // For multi-file lists, watch the last item ending via position polling in sleep tick
+            // and MediaEnded on the player when the list completes.
+            sender.MediaEnded -= Player_MediaEnded;
+            sender.MediaEnded += Player_MediaEnded;
+
             StateChanged?.Invoke();
         }
 
@@ -455,7 +856,6 @@ namespace AudiobookApp.Services
                         ? _partStarts[i + 1]
                         : (_totalDuration > start ? _totalDuration : start);
 
-                    // If duration probe failed, give each unknown part a tiny span so navigation still works.
                     if (end <= start)
                         end = start + TimeSpan.FromSeconds(1);
 
@@ -513,6 +913,47 @@ namespace AudiobookApp.Services
             {
                 _chapters.Clear();
             }
+        }
+
+        private static bool ReadAutoplayPreference()
+        {
+            try
+            {
+                var values = ApplicationData.Current.LocalSettings.Values;
+                return values.TryGetValue(AutoplaySettingKey, out var value) && value is bool on && on;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void SaveAutoplayPreference(bool enabled)
+        {
+            try
+            {
+                ApplicationData.Current.LocalSettings.Values[AutoplaySettingKey] = enabled;
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Called from UI timers to detect end-of-book for multi-file lists
+        /// where MediaEnded may not fire reliably for the whole list.
+        /// </summary>
+        public void CheckForBookEnd()
+        {
+            if (!IsPlaying || CurrentBook == null || _bookFinishedRaised)
+                return;
+
+            var total = TotalDuration;
+            if (total <= TimeSpan.Zero)
+                return;
+
+            if (GetAbsolutePosition() >= total - TimeSpan.FromMilliseconds(400))
+                RaiseBookFinishedIfNeeded();
         }
     }
 }

@@ -57,6 +57,11 @@ namespace AudiobookApp.Models
         /// </summary>
         public double LastEpubScrollRatio { get; set; }
 
+        /// <summary>
+        /// User bookmarks for EPUB reading positions.
+        /// </summary>
+        public List<EpubBookmark> EpubBookmarks { get; set; } = new();
+
         public double PlaybackSpeed { get; set; } = 1.0;
 
         [JsonIgnore]
@@ -120,6 +125,19 @@ namespace AudiobookApp.Models
             if (FilePaths.Count > 0)
                 FilePath = FilePaths[0];
         }
+    }
+
+    public class EpubBookmark
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public int ChapterIndex { get; set; }
+
+        public double ScrollRatio { get; set; }
+
+        public string Label { get; set; } = "";
+
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     }
 
     public enum ProgressFilter

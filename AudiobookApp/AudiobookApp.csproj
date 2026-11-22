@@ -25,6 +25,8 @@
     <None Remove="Views\DirectoryImportSeriesPage.xaml" />
     <None Remove="Views\SeriesReorderPage.xaml" />
     <None Remove="Views\HelpPage.xaml" />
+    <None Remove="Views\CompactPlayerBar.xaml" />
+    <None Remove="Views\MarqueeText.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -110,6 +112,16 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\HelpPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\CompactPlayerBar.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\MarqueeText.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

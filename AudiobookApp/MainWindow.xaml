@@ -9,79 +9,89 @@
         mc:Ignorable="d"
         Title="AudiobookApp">
 
-    <Grid RowDefinitions="*,Auto">
-        <NavigationView x:Name="RootNav"
-                        PaneDisplayMode="Left"
-                        IsBackButtonVisible="Collapsed"
-                        IsSettingsVisible="False">
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid x:Name="NormalShell"
+              RowDefinitions="*,Auto">
+            <NavigationView x:Name="RootNav"
+                            PaneDisplayMode="Left"
+                            IsBackButtonVisible="Collapsed"
+                            IsSettingsVisible="False"
+                            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-            <NavigationView.PaneCustomContent>
-                <StackPanel Spacing="4" Padding="0,4,0,8">
-                    <Button x:Name="FullLibraryButton"
-                            Click="FullLibrary_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Padding="12,10">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <SymbolIcon Symbol="Library"/>
-                            <TextBlock Text="Full Library"/>
-                        </StackPanel>
-                    </Button>
+                <NavigationView.PaneCustomContent>
+                    <StackPanel Spacing="4" Padding="0,4,0,8">
+                        <Button x:Name="FullLibraryButton"
+                                Click="FullLibrary_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <SymbolIcon Symbol="Library"/>
+                                <TextBlock Text="Full Library"/>
+                            </StackPanel>
+                        </Button>
 
-                    <Button x:Name="AudiobooksButton"
-                            Click="Audiobooks_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Padding="12,10">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <FontIcon Glyph="&#xE8D6;" FontSize="16"/>
-                            <TextBlock Text="Audiobooks"/>
-                        </StackPanel>
-                    </Button>
+                        <Button x:Name="AudiobooksButton"
+                                Click="Audiobooks_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE8D6;" FontSize="16"/>
+                                <TextBlock Text="Audiobooks"/>
+                            </StackPanel>
+                        </Button>
 
-                    <Button x:Name="EpubsButton"
-                            Click="Epubs_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Padding="12,10">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <FontIcon Glyph="&#xE8A5;" FontSize="16"/>
-                            <TextBlock Text="Epubs"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </NavigationView.PaneCustomContent>
+                        <Button x:Name="EpubsButton"
+                                Click="Epubs_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE8A5;" FontSize="16"/>
+                                <TextBlock Text="Epubs"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </NavigationView.PaneCustomContent>
 
-            <NavigationView.PaneFooter>
-                <StackPanel Spacing="4" Padding="0,0,0,8">
-                    <Button x:Name="HelpButton"
-                            Click="Help_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Padding="12,10">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <SymbolIcon Symbol="Help"/>
-                            <TextBlock Text="Help"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="ClearLibraryButton"
-                            Click="ClearLibrary_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Padding="12,10">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <SymbolIcon Symbol="Delete"/>
-                            <TextBlock Text="Clear library"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </NavigationView.PaneFooter>
+                <NavigationView.PaneFooter>
+                    <StackPanel Spacing="4" Padding="0,0,0,8">
+                        <Button x:Name="HelpButton"
+                                Click="Help_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <SymbolIcon Symbol="Help"/>
+                                <TextBlock Text="Help"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ClearLibraryButton"
+                                Click="ClearLibrary_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <SymbolIcon Symbol="Delete"/>
+                                <TextBlock Text="Clear library"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </NavigationView.PaneFooter>
 
-            <Frame x:Name="ContentFrame"/>
-        </NavigationView>
+                <Frame x:Name="ContentFrame"/>
+            </NavigationView>
 
-        <views:MiniPlayerBar x:Name="MiniPlayer"
-                             Grid.Row="1"
-                             Visibility="Collapsed"/>
+            <views:MiniPlayerBar x:Name="MiniPlayer"
+                                 Grid.Row="1"
+                                 Visibility="Collapsed"/>
+        </Grid>
+
+        <views:CompactPlayerBar x:Name="CompactPlayer"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Visibility="Collapsed"/>
     </Grid>
 </Window>
