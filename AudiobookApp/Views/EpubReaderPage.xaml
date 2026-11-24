@@ -6,21 +6,186 @@
     x:Name="RootPage"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid Padding="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid Padding="24" ColumnDefinitions="Auto,*" ColumnSpacing="16" RowDefinitions="Auto,*,Auto">
 
-        <Grid Margin="0,0,0,16" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <!-- Top: title + display / theme (right) -->
+        <Grid Grid.Column="1"
+              Margin="0,0,0,16"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="12">
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="4"
+                        MaxWidth="680"
+                        VerticalAlignment="Center">
+                <TextBlock x:Name="BookTitleText"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Name="ChapterTitleText"
+                           FontSize="15"
+                           Opacity="0.7"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"/>
+            </StackPanel>
+
+            <Button x:Name="SettingsButton"
+                    Grid.Column="1"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Padding="10,8"
+                    ToolTipService.ToolTip="Settings">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          Glyph="&#xE713;"
+                          FontSize="16"/>
+                <Button.Flyout>
+                    <Flyout x:Name="SettingsFlyout" Placement="Bottom">
+                        <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Width="300" Spacing="14" Padding="4">
+                                <TextBlock Text="Appearance"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"/>
+                                <Button x:Name="DarkModeButton"
+                                        Content="Dark mode"
+                                        Click="DarkModeButton_Click"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="12,8"/>
+
+                                <TextBlock Text="Text"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           Margin="0,4,0,0"/>
+                                <TextBlock Text="Text size" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <Button x:Name="FontSizeMinusButton"
+                                            Content="−"
+                                            Width="40"
+                                            Click="FontSizeMinusButton_Click"/>
+                                    <TextBlock x:Name="FontSizeLabel"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"/>
+                                    <Button x:Name="FontSizePlusButton"
+                                            Grid.Column="2"
+                                            Content="+"
+                                            Width="40"
+                                            Click="FontSizePlusButton_Click"/>
+                                </Grid>
+
+                                <TextBlock Text="Font" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="FontFamilyCombo"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="FontFamilyCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Serif" Tag="serif"/>
+                                    <ComboBoxItem Content="Sans" Tag="sans"/>
+                                </ComboBox>
+
+                                <TextBlock Text="Line spacing" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="LineSpacingCombo"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="LineSpacingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Tight" Tag="tight"/>
+                                    <ComboBoxItem Content="Normal" Tag="normal"/>
+                                    <ComboBoxItem Content="Relaxed" Tag="relaxed"/>
+                                </ComboBox>
+
+                                <TextBlock Text="Page width" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="ContentWidthCombo"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="ContentWidthCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Narrow" Tag="narrow"/>
+                                    <ComboBoxItem Content="Medium" Tag="medium"/>
+                                    <ComboBoxItem Content="Wide" Tag="wide"/>
+                                </ComboBox>
+
+                                <TextBlock Text="Text to speech"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           Margin="0,4,0,0"/>
+                                <TextBlock Text="Voice" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="TtsVoiceCombo"
+                                          HorizontalAlignment="Stretch"
+                                          PlaceholderText="Voice"
+                                          SelectionChanged="TtsVoiceCombo_SelectionChanged"/>
+
+                                <TextBlock Text="Volume" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Slider x:Name="TtsVolumeSlider"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            StepFrequency="1"
+                                            Value="100"
+                                            IsThumbToolTipEnabled="False"
+                                            ValueChanged="TtsVolumeSlider_ValueChanged"/>
+                                    <TextBlock x:Name="TtsVolumeValueText"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               MinWidth="36"
+                                               Text="100%"/>
+                                </Grid>
+
+                                <TextBlock Text="Speed" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Slider x:Name="TtsSpeedSlider"
+                                            Minimum="0.5"
+                                            Maximum="2.0"
+                                            StepFrequency="0.1"
+                                            Value="1.0"
+                                            IsThumbToolTipEnabled="False"
+                                            ValueChanged="TtsSpeedSlider_ValueChanged"/>
+                                    <TextBlock x:Name="TtsSpeedValueText"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               MinWidth="40"
+                                               Text="1.0×"/>
+                                </Grid>
+
+                                <TextBlock Text="Sleep timer" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="TtsSleepCombo"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="TtsSleepCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Off" Tag="0" IsSelected="True"/>
+                                    <ComboBoxItem Content="5 minutes" Tag="5"/>
+                                    <ComboBoxItem Content="10 minutes" Tag="10"/>
+                                    <ComboBoxItem Content="15 minutes" Tag="15"/>
+                                    <ComboBoxItem Content="30 minutes" Tag="30"/>
+                                    <ComboBoxItem Content="45 minutes" Tag="45"/>
+                                    <ComboBoxItem Content="60 minutes" Tag="60"/>
+                                </ComboBox>
+                                <TextBlock x:Name="TtsSleepStatusText"
+                                           Opacity="0.7"
+                                           TextWrapping="WrapWholeWords"
+                                           Text=""/>
+
+                                <Button x:Name="TtsStopButton"
+                                        Content="Stop listening"
+                                        HorizontalAlignment="Stretch"
+                                        Click="TtsStopButton_Click"/>
+                                <TextBlock x:Name="TtsStatusText"
+                                           Opacity="0.7"
+                                           TextWrapping="WrapWholeWords"
+                                           Text="Stopped"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <!-- Left vertical toolbar -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalAlignment="Stretch"
+                      Width="132">
+            <StackPanel Spacing="8" Padding="0,0,4,0">
                 <Button x:Name="TocButton"
                         Content="Contents"
                         Click="TocButton_Click"
-                        Padding="14,8">
+                        HorizontalAlignment="Stretch"
+                        Padding="12,10">
                     <Button.Flyout>
-                        <Flyout x:Name="TocFlyout" Placement="Bottom">
+                        <Flyout x:Name="TocFlyout" Placement="Right">
                             <ListView x:Name="TocList"
                                       Width="320"
                                       MaxHeight="420"
@@ -43,9 +208,10 @@
                 <Button x:Name="BookmarkButton"
                         Content="Bookmarks"
                         Click="BookmarkButton_Click"
-                        Padding="14,8">
+                        HorizontalAlignment="Stretch"
+                        Padding="12,10">
                     <Button.Flyout>
-                        <Flyout x:Name="BookmarkFlyout" Placement="Bottom">
+                        <Flyout x:Name="BookmarkFlyout" Placement="Right">
                             <StackPanel Width="340" Spacing="10" Padding="4">
                                 <Button x:Name="AddBookmarkButton"
                                         Content="Add bookmark here"
@@ -90,9 +256,10 @@
                 <Button x:Name="SearchButton"
                         Content="Search"
                         Click="SearchButton_Click"
-                        Padding="14,8">
+                        HorizontalAlignment="Stretch"
+                        Padding="12,10">
                     <Button.Flyout>
-                        <Flyout x:Name="SearchFlyout" Placement="Bottom">
+                        <Flyout x:Name="SearchFlyout" Placement="Right">
                             <StackPanel Width="360" Spacing="10" Padding="4">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                     <TextBox x:Name="SearchBox"
@@ -141,116 +308,132 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-            </StackPanel>
 
-            <StackPanel Grid.Column="1"
-                        HorizontalAlignment="Center"
-                        Spacing="4"
-                        MaxWidth="680">
-                <TextBlock x:Name="BookTitleText"
-                           FontSize="22"
-                           FontWeight="SemiBold"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"/>
-                <TextBlock x:Name="ChapterTitleText"
-                           FontSize="15"
-                           Opacity="0.7"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="2"
-                        Orientation="Horizontal"
-                        Spacing="8"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top">
-                <Button x:Name="DisplayButton"
-                        Content="Aa"
-                        VerticalAlignment="Top"
-                        Padding="14,8">
+                <Button x:Name="HighlightButton"
+                        Content="Highlight"
+                        Click="HighlightButton_Click"
+                        HorizontalAlignment="Stretch"
+                        Padding="12,10">
                     <Button.Flyout>
-                        <Flyout x:Name="DisplayFlyout" Placement="Bottom">
-                            <StackPanel Width="280" Spacing="14" Padding="4">
-                                <TextBlock Text="Text size"
+                        <Flyout x:Name="HighlightFlyout" Placement="Right">
+                            <StackPanel Width="360" Spacing="10" Padding="4">
+                                <TextBlock Text="Highlights in this book"
                                            FontWeight="SemiBold"/>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                    <Button x:Name="FontSizeMinusButton"
-                                            Content="−"
-                                            Width="40"
-                                            Click="FontSizeMinusButton_Click"/>
-                                    <TextBlock x:Name="FontSizeLabel"
-                                               Grid.Column="1"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center"/>
-                                    <Button x:Name="FontSizePlusButton"
-                                            Grid.Column="2"
-                                            Content="+"
-                                            Width="40"
-                                            Click="FontSizePlusButton_Click"/>
-                                </Grid>
-
-                                <TextBlock Text="Font"
-                                           FontWeight="SemiBold"/>
-                                <ComboBox x:Name="FontFamilyCombo"
-                                          HorizontalAlignment="Stretch"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged">
-                                    <ComboBoxItem Content="Serif" Tag="serif"/>
-                                    <ComboBoxItem Content="Sans" Tag="sans"/>
-                                </ComboBox>
-
-                                <TextBlock Text="Line spacing"
-                                           FontWeight="SemiBold"/>
-                                <ComboBox x:Name="LineSpacingCombo"
-                                          HorizontalAlignment="Stretch"
-                                          SelectionChanged="LineSpacingCombo_SelectionChanged">
-                                    <ComboBoxItem Content="Tight" Tag="tight"/>
-                                    <ComboBoxItem Content="Normal" Tag="normal"/>
-                                    <ComboBoxItem Content="Relaxed" Tag="relaxed"/>
-                                </ComboBox>
-
-                                <TextBlock Text="Page width"
-                                           FontWeight="SemiBold"/>
-                                <ComboBox x:Name="ContentWidthCombo"
-                                          HorizontalAlignment="Stretch"
-                                          SelectionChanged="ContentWidthCombo_SelectionChanged">
-                                    <ComboBoxItem Content="Narrow" Tag="narrow"/>
-                                    <ComboBoxItem Content="Medium" Tag="medium"/>
-                                    <ComboBoxItem Content="Wide" Tag="wide"/>
-                                </ComboBox>
+                                <TextBlock Text="Select text, then right-click to highlight or add a note."
+                                           Opacity="0.7"
+                                           TextWrapping="WrapWholeWords"/>
+                                <TextBlock x:Name="HighlightEmptyText"
+                                           Text="No highlights yet."
+                                           Opacity="0.7"
+                                           Visibility="Collapsed"/>
+                                <ListView x:Name="HighlightList"
+                                          MaxHeight="360"
+                                          SelectionMode="Single"
+                                          IsItemClickEnabled="True"
+                                          ItemClick="HighlightList_ItemClick">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Spacing="2"
+                                                        Padding="2,4"
+                                                        RightTapped="HighlightListItem_RightTapped">
+                                                <TextBlock Text="{Binding NoteText}"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="WrapWholeWords"
+                                                           Visibility="{Binding NoteVisibility}"/>
+                                                <TextBlock Text="{Binding DisplayLabel}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                                <TextBlock Text="{Binding DetailText}"
+                                                           FontSize="12"
+                                                           Opacity="0.7"
+                                                           TextWrapping="WrapWholeWords"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
                 </Button>
 
-                <Button x:Name="DarkModeButton"
-                        Content="Dark mode"
-                        Click="DarkModeButton_Click"
-                        VerticalAlignment="Top"
-                        Padding="14,8"/>
+                <Button x:Name="TtsButton"
+                        Content="Listen"
+                        Click="TtsButton_Click"
+                        HorizontalAlignment="Stretch"
+                        Padding="12,10"/>
             </StackPanel>
-        </Grid>
+        </ScrollViewer>
 
+        <!-- Page + highlight-note gutter -->
         <Border x:Name="BookPageBorder"
                 Grid.Row="1"
-                MaxWidth="820"
+                Grid.Column="1"
                 HorizontalAlignment="Center"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
-                Margin="8,0">
+                Margin="0">
             <Grid>
                 <ScrollViewer x:Name="PageScroller"
-                              Padding="48,40,48,56"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <RichTextBlock x:Name="PageText"
-                                   FontFamily="Georgia"
-                                   FontSize="18"
-                                   LineHeight="32"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="WrapWholeWords"
-                                   IsTextSelectionEnabled="True"/>
+                    <Grid x:Name="PageContentGrid"
+                          ColumnDefinitions="*,Auto,Auto"
+                          ColumnSpacing="0">
+                        <RichTextBlock x:Name="PageText"
+                                       Margin="48,40,32,56"
+                                       FontFamily="Georgia"
+                                       FontSize="18"
+                                       LineHeight="32"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="WrapWholeWords"
+                                       IsTextSelectionEnabled="True"
+                                       SizeChanged="PageText_SizeChanged">
+                            <RichTextBlock.ContextFlyout>
+                                <MenuFlyout Opening="PageTextContextFlyout_Opening">
+                                    <MenuFlyoutItem Text="Look up…"
+                                                    Click="ContextDefine_Click"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutSubItem Text="Highlight">
+                                        <MenuFlyoutItem Text="Yellow" Tag="Yellow" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Green" Tag="Green" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Blue" Tag="Blue" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Pink" Tag="Pink" Click="ContextHighlightColor_Click"/>
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSubItem Text="Highlight + note…">
+                                        <MenuFlyoutItem Text="Yellow" Tag="Yellow|note" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Green" Tag="Green|note" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Blue" Tag="Blue|note" Click="ContextHighlightColor_Click"/>
+                                        <MenuFlyoutItem Text="Pink" Tag="Pink|note" Click="ContextHighlightColor_Click"/>
+                                    </MenuFlyoutSubItem>
+                                </MenuFlyout>
+                            </RichTextBlock.ContextFlyout>
+                        </RichTextBlock>
+
+                        <Button x:Name="CommentGutterToggleButton"
+                                Grid.Column="1"
+                                Content="›"
+                                Width="28"
+                                VerticalAlignment="Stretch"
+                                Padding="0"
+                                Click="CommentGutterToggleButton_Click"
+                                ToolTipService.ToolTip="Hide notes"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1,0,0,0"
+                                CornerRadius="0"/>
+
+                        <Border x:Name="CommentGutterHost"
+                                Grid.Column="2"
+                                Width="260"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1,0,0,0"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                Padding="10,40,10,56">
+                            <Canvas x:Name="CommentGutter"
+                                    HorizontalAlignment="Stretch"/>
+                        </Border>
+                    </Grid>
                 </ScrollViewer>
 
                 <ProgressRing x:Name="LoadingRing"
@@ -264,8 +447,8 @@
 
         <Grid x:Name="FooterNavGrid"
               Grid.Row="2"
+              Grid.Column="1"
               Margin="0,16,0,0"
-              MaxWidth="820"
               HorizontalAlignment="Center"
               ColumnSpacing="16"
               ColumnDefinitions="Auto,*,Auto">

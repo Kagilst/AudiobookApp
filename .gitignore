@@ -1,0 +1,29 @@
+## Build
+**/bin/
+**/obj/
+**/AppPackages/
+**/BundleArtifacts/
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+
+## VS / IDE
+.vs/
+.idea/
+*.rsuser
+
+## Publish / local dist
+dist/
+dist-launcher/
+launcher-build/
+
+## Logs / temp
+*.log
+*.tmp
+*.cache
+*.pdb
+
+## OS
+Thumbs.db
+Desktop.ini

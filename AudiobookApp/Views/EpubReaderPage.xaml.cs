@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AudiobookApp.Models;
 using AudiobookApp.Services;
+using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,8 +16,10 @@ using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using VersOne.Epub;
+using Windows.Media.SpeechSynthesis;
 using Windows.Storage;
 using Windows.System;
+using Windows.UI;
 using Windows.UI.Text;
 
 namespace AudiobookApp.Views
@@ -28,12 +32,25 @@ namespace AudiobookApp.Views
         private const double MinFontSize = 14;
         private const double MaxFontSize = 28;
         private const double DefaultFontSize = 18;
+        private const double CommentGutterWidth = 260;
+        private const double CommentGutterToggleWidth = 28;
+        private const double CommentCardMinGap = 10;
+        private const double NoteClusterProximityPx = 72;
+        private const int NoteCollapsedMaxLines = 4;
+        private const string CommentGutterExpandedSettingKey = "EpubCommentGutterExpanded";
 
         private readonly Book _book;
         private readonly List<EpubChapterContent> _chapters = new();
         private readonly List<TocEntry> _tocEntries = new();
         private readonly ObservableCollection<BookmarkListItem> _bookmarkItems = new();
+        private readonly ObservableCollection<HighlightListItem> _highlightItems = new();
         private readonly List<SearchHit> _searchHits = new();
+        private readonly HashSet<Guid> _expandedNoteIds = new();
+        private readonly Dictionary<string, Guid> _noteClusterSelectedIds = new();
+        private readonly EpubTtsService _tts = new();
+        private readonly EpubTtsSleepTimer _ttsSleep = new();
+        private readonly WordNetDictionaryService _dictionary = new();
+        private readonly DispatcherTimer _ttsSleepUiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
         private int _chapterIndex;
         private int _searchHitIndex = -1;
         /// <summary>Null means follow Windows light/dark setting.</summary>
@@ -42,7 +59,16 @@ namespace AudiobookApp.Views
         private bool _suppressChapterCombo;
         private bool _suppressDisplayControls;
         private bool _ignoreNextBookmarkItemClick;
+        private int? _capturedSelectionStart;
+        private int? _capturedSelectionEnd;
+        private string _capturedSelectedText = string.Empty;
         private double _pendingScrollRatio = -1;
+        private int? _ttsActiveStart;
+        private int? _ttsActiveEnd;
+        private bool _commentGutterExpanded = true;
+        private bool _suppressTtsVolumeSlider;
+        private bool _suppressTtsSpeedSlider;
+        private bool _suppressTtsSleepCombo;
 
         private double _fontSize = DefaultFontSize;
         private string _fontFamilyKey = "serif";
@@ -58,17 +84,39 @@ namespace AudiobookApp.Views
 
             BookTitleText.Text = book.Title;
             _book.EpubBookmarks ??= new List<EpubBookmark>();
+            _book.EpubHighlights ??= new List<EpubHighlight>();
             _darkModeOverride = ReadDarkModePreference();
             LoadReadingPreferences();
             ApplyTheme();
             ApplyReadingPreferences(restoreScroll: false);
             SyncDisplayControls();
             BookmarkList.ItemsSource = _bookmarkItems;
+            HighlightList.ItemsSource = _highlightItems;
+            _commentGutterExpanded = ReadCommentGutterExpanded();
+            ApplyCommentGutterLayout();
             RefreshBookmarkList();
+            RefreshHighlightList();
+            InitTtsVoices();
+            _ttsSleepUiTimer.Tick += (_, _) => OnTtsSleepTick();
+            _tts.StateChanged += () => DispatcherQueue.TryEnqueue(UpdateTtsUi);
+            _tts.PositionChanged += OnTtsPositionChanged;
+            _tts.Completed += () => DispatcherQueue.TryEnqueue(() =>
+            {
+                _ttsActiveStart = null;
+                _ttsActiveEnd = null;
+                CancelTtsSleepTimer();
+                ApplyHighlightsToPage();
+                UpdateTtsUi();
+            });
 
             Loaded += async (_, _) => await LoadBookAsync();
             Unloaded += (_, _) =>
             {
+                PersistTtsPosition();
+                CancelTtsSleepTimer();
+                _tts.Stop();
+                _tts.Dispose();
+                _dictionary.Dispose();
                 PersistProgress();
                 SaveReadingPreferences();
             };
@@ -178,9 +226,7 @@ namespace AudiobookApp.Views
             BookTitleText.FontFamily = fontFamily;
             ChapterTitleText.FontFamily = fontFamily;
 
-            var maxWidth = GetContentMaxWidth(_contentWidthKey);
-            BookPageBorder.MaxWidth = maxWidth;
-            FooterNavGrid.MaxWidth = maxWidth;
+            ApplyReaderMaxWidths();
 
             FontSizeLabel.Text = $"{_fontSize:0} pt";
             FontSizeMinusButton.IsEnabled = _fontSize > MinFontSize;
@@ -217,6 +263,62 @@ namespace AudiobookApp.Views
                 "wide" => 1040,
                 _ => 820
             };
+
+        private void ApplyReaderMaxWidths()
+        {
+            var textWidth = GetContentMaxWidth(_contentWidthKey);
+            var side = CommentGutterToggleWidth + (_commentGutterExpanded ? CommentGutterWidth : 0);
+            BookPageBorder.MaxWidth = textWidth + side;
+            FooterNavGrid.MaxWidth = textWidth + side;
+        }
+
+        private void CommentGutterToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            _commentGutterExpanded = !_commentGutterExpanded;
+            SaveCommentGutterExpanded(_commentGutterExpanded);
+            ApplyCommentGutterLayout();
+            ApplyReaderMaxWidths();
+            if (_commentGutterExpanded)
+                DispatcherQueue.TryEnqueue(RefreshNoteGutter);
+        }
+
+        private void ApplyCommentGutterLayout()
+        {
+            if (CommentGutterHost == null || CommentGutterToggleButton == null)
+                return;
+
+            CommentGutterHost.Visibility = _commentGutterExpanded ? Visibility.Visible : Visibility.Collapsed;
+            CommentGutterToggleButton.Content = _commentGutterExpanded ? "‹" : "›";
+            ToolTipService.SetToolTip(
+                CommentGutterToggleButton,
+                _commentGutterExpanded ? "Hide notes" : "Show notes");
+        }
+
+        private static bool ReadCommentGutterExpanded()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings.Values;
+                if (settings.TryGetValue(CommentGutterExpandedSettingKey, out var value) && value is bool expanded)
+                    return expanded;
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+
+        private static void SaveCommentGutterExpanded(bool expanded)
+        {
+            try
+            {
+                ApplicationData.Current.LocalSettings.Values[CommentGutterExpandedSettingKey] = expanded;
+            }
+            catch
+            {
+            }
+        }
 
         private void ChangeFontSize(double delta)
         {
@@ -390,10 +492,13 @@ namespace AudiobookApp.Views
                     TocButton.IsEnabled = false;
                     BookmarkButton.IsEnabled = false;
                     SearchButton.IsEnabled = false;
+                    HighlightButton.IsEnabled = false;
+                    TtsButton.IsEnabled = false;
                     return;
                 }
 
                 RefreshBookmarkList();
+                RefreshHighlightList();
                 _chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, _chapters.Count - 1);
                 ShowChapter(_chapterIndex, restoreScroll: true);
             }
@@ -407,6 +512,8 @@ namespace AudiobookApp.Views
                 TocButton.IsEnabled = false;
                 BookmarkButton.IsEnabled = false;
                 SearchButton.IsEnabled = false;
+                HighlightButton.IsEnabled = false;
+                TtsButton.IsEnabled = false;
             }
             finally
             {
@@ -605,11 +712,274 @@ namespace AudiobookApp.Views
             {
                 foreach (var chunk in SplitPlainParagraphs(chapter.PlainText))
                     PageText.Blocks.Add(CreatePlainParagraph(chunk, _fontSize));
-                return;
+            }
+            else
+            {
+                foreach (var block in blocks)
+                    PageText.Blocks.Add(block);
             }
 
-            foreach (var block in blocks)
-                PageText.Blocks.Add(block);
+            ApplyHighlightsToPage();
+            DispatcherQueue.TryEnqueue(RefreshNoteGutter);
+        }
+
+        private void PageText_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (Math.Abs(e.PreviousSize.Height - e.NewSize.Height) > 0.5)
+                RefreshNoteGutter();
+        }
+
+        private void ApplyHighlightsToPage()
+        {
+            PageText.TextHighlighters.Clear();
+
+            _book.EpubHighlights ??= new List<EpubHighlight>();
+            var plain = GetRenderedPlainText(PageText);
+            var plainLen = plain.Length;
+
+            foreach (var group in _book.EpubHighlights
+                         .Where(h => h.ChapterIndex == _chapterIndex && h.EndOffset > h.StartOffset)
+                         .GroupBy(h => h.Color))
+            {
+                var highlighter = new TextHighlighter
+                {
+                    Background = new SolidColorBrush(GetHighlightColor(group.Key, isTts: false))
+                };
+
+                foreach (var h in group)
+                {
+                    var start = Math.Clamp(h.StartOffset, 0, plainLen);
+                    var end = Math.Clamp(h.EndOffset, start, plainLen);
+                    if (end <= start)
+                        continue;
+                    highlighter.Ranges.Add(new TextRange { StartIndex = start, Length = end - start });
+                }
+
+                if (highlighter.Ranges.Count > 0)
+                    PageText.TextHighlighters.Add(highlighter);
+            }
+
+            if (_ttsActiveStart is int ttsStart && _ttsActiveEnd is int ttsEnd && ttsEnd > ttsStart)
+            {
+                var start = Math.Clamp(ttsStart, 0, plainLen);
+                var end = Math.Clamp(ttsEnd, start, plainLen);
+                if (end > start)
+                {
+                    var ttsHighlighter = new TextHighlighter
+                    {
+                        Background = new SolidColorBrush(GetHighlightColor(EpubHighlightColor.Blue, isTts: true))
+                    };
+                    ttsHighlighter.Ranges.Add(new TextRange { StartIndex = start, Length = end - start });
+                    PageText.TextHighlighters.Add(ttsHighlighter);
+                }
+            }
+        }
+
+        private static Color GetHighlightColor(EpubHighlightColor color, bool isTts)
+        {
+            if (isTts)
+                return Color.FromArgb(90, 100, 180, 255);
+
+            return color switch
+            {
+                EpubHighlightColor.Green => Color.FromArgb(120, 140, 220, 120),
+                EpubHighlightColor.Blue => Color.FromArgb(120, 120, 180, 240),
+                EpubHighlightColor.Pink => Color.FromArgb(120, 240, 140, 180),
+                _ => Color.FromArgb(120, 255, 230, 100)
+            };
+        }
+
+        /// <summary>
+        /// Run-character stream used by TextHighlighter (no synthetic line-break characters).
+        /// </summary>
+        private static string GetRenderedPlainText(RichTextBlock rtb)
+        {
+            var sb = new StringBuilder();
+            foreach (var paragraph in rtb.Blocks.OfType<Paragraph>())
+                AppendRunTextOnly(paragraph.Inlines, sb);
+            return sb.ToString();
+        }
+
+        private static void AppendRunTextOnly(InlineCollection inlines, StringBuilder sb)
+        {
+            foreach (var inline in inlines)
+            {
+                switch (inline)
+                {
+                    case Run run:
+                        sb.Append(run.Text);
+                        break;
+                    case Span span:
+                        AppendRunTextOnly(span.Inlines, sb);
+                        break;
+                }
+            }
+        }
+
+        private static IEnumerable<Run> EnumerateRuns(InlineCollection inlines)
+        {
+            foreach (var inline in inlines)
+            {
+                switch (inline)
+                {
+                    case Run run:
+                        yield return run;
+                        break;
+                    case Span span:
+                        foreach (var nested in EnumerateRuns(span.Inlines))
+                            yield return nested;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Strip line breaks from SelectedText so it matches the run-only highlighter stream.</summary>
+        private static string ToHighlighterText(string? selected) =>
+            (selected ?? string.Empty)
+                .Replace("\r\n", string.Empty)
+                .Replace("\r", string.Empty)
+                .Replace("\n", string.Empty);
+
+        private bool TryGetSelectionOffsets(out int start, out int end, out string selected)
+        {
+            start = 0;
+            end = 0;
+            selected = PageText.SelectedText ?? string.Empty;
+
+            if (TryGetLiveSelectionOffsets(out start, out end, out var liveSelected))
+            {
+                selected = liveSelected;
+                return true;
+            }
+
+            if (_capturedSelectionStart is int capturedStart &&
+                _capturedSelectionEnd is int capturedEnd &&
+                capturedEnd > capturedStart)
+            {
+                start = capturedStart;
+                end = capturedEnd;
+                selected = _capturedSelectedText;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryGetLiveSelectionOffsets(out int start, out int end, out string selected)
+        {
+            start = 0;
+            end = 0;
+            selected = PageText.SelectedText ?? string.Empty;
+            if (string.IsNullOrEmpty(selected))
+                return false;
+
+            var needle = ToHighlighterText(selected);
+            if (needle.Length == 0)
+                return false;
+
+            var plain = GetRenderedPlainText(PageText);
+            if (plain.Length == 0)
+                return false;
+
+            // Hint from pointer position mapped into run-only space.
+            var hint = GetRunOnlyCharIndex(PageText, PageText.SelectionStart);
+
+            var best = -1;
+            var bestDistance = int.MaxValue;
+            for (var i = plain.IndexOf(needle, StringComparison.Ordinal);
+                 i >= 0;
+                 i = plain.IndexOf(needle, i + 1, StringComparison.Ordinal))
+            {
+                var distance = Math.Abs(i - hint);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+
+            if (best < 0)
+                return false;
+
+            // Exact text guarantee: highlighter range == selected text without break chars.
+            start = best;
+            end = best + needle.Length;
+            return plain[start..end] == needle;
+        }
+
+        private static int GetRunOnlyCharIndex(RichTextBlock rtb, TextPointer? pointer)
+        {
+            if (pointer == null)
+                return 0;
+
+            var index = 0;
+            foreach (var paragraph in rtb.Blocks.OfType<Paragraph>())
+            {
+                foreach (var run in EnumerateRuns(paragraph.Inlines))
+                {
+                    var text = run.Text ?? string.Empty;
+                    if (text.Length == 0)
+                        continue;
+
+                    TextPointer? runStart = null;
+                    TextPointer? runEnd = null;
+                    try
+                    {
+                        runStart = run.ContentStart;
+                        runEnd = run.ContentEnd;
+                    }
+                    catch
+                    {
+                        index += text.Length;
+                        continue;
+                    }
+
+                    if (runStart == null || runEnd == null)
+                    {
+                        index += text.Length;
+                        continue;
+                    }
+
+                    if (pointer.Offset <= runStart.Offset)
+                        return index;
+
+                    if (pointer.Offset >= runEnd.Offset)
+                    {
+                        index += text.Length;
+                        continue;
+                    }
+
+                    var pointerSpan = Math.Max(runEnd.Offset - runStart.Offset, 1);
+                    var local = pointer.Offset - runStart.Offset;
+                    var localChar = pointerSpan == text.Length
+                        ? local
+                        : (int)Math.Round(local * (double)text.Length / pointerSpan);
+                    return index + Math.Clamp(localChar, 0, text.Length);
+                }
+            }
+
+            return index;
+        }
+
+        private void CaptureSelectionForContextMenu()
+        {
+            _capturedSelectionStart = null;
+            _capturedSelectionEnd = null;
+            _capturedSelectedText = string.Empty;
+
+            if (!TryGetLiveSelectionOffsets(out var start, out var end, out var selected))
+                return;
+
+            _capturedSelectionStart = start;
+            _capturedSelectionEnd = end;
+            _capturedSelectedText = selected;
+        }
+
+        private void ClearCapturedSelection()
+        {
+            _capturedSelectionStart = null;
+            _capturedSelectionEnd = null;
+            _capturedSelectedText = string.Empty;
         }
 
         private static Paragraph CreatePlainParagraph(string text, double baseFontSize)
@@ -1004,7 +1374,7 @@ namespace AudiobookApp.Views
             RefreshBookmarkList();
         }
 
-        private void AddBookmarkButton_Click(object sender, RoutedEventArgs e)
+        private async void AddBookmarkButton_Click(object sender, RoutedEventArgs e)
         {
             if (_chapters.Count == 0)
                 return;
@@ -1012,7 +1382,16 @@ namespace AudiobookApp.Views
             CaptureScrollRatioQuiet();
             var ratio = Math.Clamp(_book.LastEpubScrollRatio, 0, 1);
             var chapter = _chapters[_chapterIndex];
-            var label = $"{chapter.Title} · {(int)Math.Round(ratio * 100)}%";
+            var defaultLabel = $"{chapter.Title} · {(int)Math.Round(ratio * 100)}%";
+            var name = await PromptTextAsync(
+                "Bookmark",
+                "Name this bookmark:",
+                defaultLabel,
+                multiline: false);
+            if (name == null)
+                return;
+
+            var label = string.IsNullOrWhiteSpace(name) ? defaultLabel : name.Trim();
 
             _book.EpubBookmarks ??= new List<EpubBookmark>();
             _book.EpubBookmarks.Add(new EpubBookmark
@@ -1152,7 +1531,7 @@ namespace AudiobookApp.Views
 
             for (var chapterIndex = 0; chapterIndex < _chapters.Count && _searchHits.Count < maxHits; chapterIndex++)
             {
-                var plain = _chapters[chapterIndex].PlainText;
+                var plain = GetChapterPlainText(chapterIndex);
                 if (string.IsNullOrEmpty(plain))
                     continue;
 
@@ -1549,12 +1928,1121 @@ namespace AudiobookApp.Views
             public Thickness IndentMargin => new Thickness(Depth * 16, 0, 0, 0);
         }
 
+        private void HighlightButton_Click(object sender, RoutedEventArgs e)
+        {
+            CaptureSelectionForContextMenu();
+            RefreshHighlightList();
+        }
+
+        private void TtsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_tts.IsPlaying && !_tts.IsPaused)
+            {
+                _tts.Pause();
+                PersistTtsPosition();
+                UpdateTtsUi();
+                return;
+            }
+
+            _ = TtsStartOrResumeAsync();
+        }
+
+        private void PageTextContextFlyout_Opening(object sender, object e) =>
+            CaptureSelectionForContextMenu();
+
+        private async void ContextDefine_Click(object sender, RoutedEventArgs e)
+        {
+            CaptureSelectionForContextMenu();
+            var selected = _capturedSelectedText;
+            if (string.IsNullOrWhiteSpace(selected) &&
+                !string.IsNullOrWhiteSpace(PageText.SelectedText))
+                selected = PageText.SelectedText;
+
+            var word = WordNetDictionaryService.ExtractLookupWord(selected);
+            if (string.IsNullOrWhiteSpace(word))
+            {
+                await ShowInfoAsync("Dictionary", "Select a word to look up.");
+                return;
+            }
+
+            await ShowDictionaryLookupAsync(word);
+        }
+
+        private async Task ShowDictionaryLookupAsync(string word)
+        {
+            if (!_dictionary.IsAvailable)
+            {
+                await ShowInfoAsync(
+                    "Dictionary",
+                    "The offline WordNet dictionary pack was not found. Reinstall the app or rebuild Assets/Dictionary/wordnet-en.db.");
+                return;
+            }
+
+            var result = await _dictionary.LookupAsync(word);
+            if (!result.Found)
+            {
+                await ShowInfoAsync("Dictionary", $"No definition found for “{word}”.");
+                return;
+            }
+
+            var body = new StackPanel { Spacing = 10, MaxWidth = 440 };
+            var matched = string.Equals(result.Query, result.MatchedLemma, StringComparison.OrdinalIgnoreCase)
+                ? result.MatchedLemma
+                : $"{result.Query} → {result.MatchedLemma}";
+            body.Children.Add(new TextBlock
+            {
+                Text = matched,
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+
+            string? lastPos = null;
+            var senseIndex = 0;
+            foreach (var sense in result.Senses.Take(12))
+            {
+                if (!string.Equals(lastPos, sense.PartOfSpeech, StringComparison.Ordinal))
+                {
+                    lastPos = sense.PartOfSpeech;
+                    senseIndex = 0;
+                    body.Children.Add(new TextBlock
+                    {
+                        Text = sense.PartOfSpeechLabel,
+                        FontSize = 12,
+                        Opacity = 0.7,
+                        Margin = new Thickness(0, 4, 0, 0)
+                    });
+                }
+
+                senseIndex++;
+                var block = new StackPanel { Spacing = 2 };
+                block.Children.Add(new TextBlock
+                {
+                    Text = $"{senseIndex}. {sense.Definition}",
+                    TextWrapping = TextWrapping.WrapWholeWords,
+                    FontSize = 13
+                });
+                if (!string.IsNullOrWhiteSpace(sense.Synonyms))
+                {
+                    block.Children.Add(new TextBlock
+                    {
+                        Text = "Synonyms: " + sense.Synonyms,
+                        TextWrapping = TextWrapping.WrapWholeWords,
+                        FontSize = 12,
+                        Opacity = 0.75
+                    });
+                }
+
+                body.Children.Add(block);
+            }
+
+            if (result.Senses.Count > 12)
+            {
+                body.Children.Add(new TextBlock
+                {
+                    Text = $"…and {result.Senses.Count - 12} more senses",
+                    FontSize = 12,
+                    Opacity = 0.65
+                });
+            }
+
+            var scroller = new ScrollViewer
+            {
+                Content = body,
+                MaxHeight = 420,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
+
+            await new ContentDialog
+            {
+                Title = "Dictionary",
+                Content = scroller,
+                CloseButtonText = "Close",
+                XamlRoot = XamlRoot
+            }.ShowAsync();
+        }
+
+        private void ContextHighlightColor_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string tag })
+                return;
+
+            var parts = tag.Split('|');
+            if (!Enum.TryParse<EpubHighlightColor>(parts[0], out var color))
+                return;
+
+            var askNote = parts.Length > 1 &&
+                          parts[1].Equals("note", StringComparison.OrdinalIgnoreCase);
+            _ = CreateHighlightFromSelectionAsync(color, askNote);
+        }
+
+        private async Task CreateHighlightFromSelectionAsync(EpubHighlightColor color, bool askNote)
+        {
+            // Capture immediately — flyouts/dialogs clear the live selection.
+            if (!TryGetSelectionOffsets(out var start, out var end, out _))
+            {
+                await ShowInfoAsync("Highlight", "Select some text in the chapter first.");
+                return;
+            }
+
+            string? note = null;
+            if (askNote)
+            {
+                note = await PromptNoteAsync("Highlight note", "Optional note for this highlight:", string.Empty);
+                if (note == null)
+                {
+                    ClearCapturedSelection();
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(note))
+                    note = null;
+            }
+
+            _book.EpubHighlights ??= new List<EpubHighlight>();
+            _book.EpubHighlights.Add(new EpubHighlight
+            {
+                ChapterIndex = _chapterIndex,
+                StartOffset = start,
+                EndOffset = end,
+                Color = color,
+                Note = note,
+                CreatedUtc = DateTime.UtcNow
+            });
+
+            ClearCapturedSelection();
+            HighlightFlyout.Hide();
+            RenderChapter(_chapters[_chapterIndex]);
+            RefreshHighlightList();
+            ProgressChanged?.Invoke(_book);
+        }
+
+        private void HighlightList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is not HighlightListItem item)
+                return;
+
+            HighlightFlyout.Hide();
+            JumpToHighlight(item.Highlight);
+        }
+
+        private void HighlightListItem_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { DataContext: HighlightListItem item })
+                return;
+
+            e.Handled = true;
+            var highlightId = item.Highlight.Id;
+            var menu = new MenuFlyout();
+
+            var editNote = new MenuFlyoutItem
+            {
+                Text = string.IsNullOrWhiteSpace(item.Highlight.Note) ? "Add note…" : "Edit note…"
+            };
+            editNote.Click += async (_, _) => await EditHighlightNoteByIdAsync(highlightId);
+            menu.Items.Add(editNote);
+
+            var delete = new MenuFlyoutItem
+            {
+                Text = string.IsNullOrWhiteSpace(item.Highlight.Note) ? "Delete highlight" : "Delete highlight + note"
+            };
+            delete.Click += (_, _) => RemoveHighlightById(highlightId);
+            menu.Items.Add(delete);
+
+            if (sender is FrameworkElement target)
+                menu.ShowAt(target, e.GetPosition(target));
+        }
+
+        private async void EditHighlightNote_Click(object sender, RoutedEventArgs e)
+        {
+            Guid id;
+            if (sender is FrameworkElement { Tag: string tag } && Guid.TryParse(tag, out id))
+            {
+                await EditHighlightNoteByIdAsync(id);
+                return;
+            }
+
+            if (sender is FrameworkElement { Tag: Guid guid })
+                await EditHighlightNoteByIdAsync(guid);
+        }
+
+        private async Task EditHighlightNoteByIdAsync(Guid id)
+        {
+            var highlight = _book.EpubHighlights?.FirstOrDefault(h => h.Id == id);
+            if (highlight == null)
+                return;
+
+            var note = await PromptNoteAsync("Highlight note", "Edit note:", highlight.Note ?? string.Empty);
+            if (note == null)
+                return;
+
+            highlight.Note = string.IsNullOrWhiteSpace(note) ? null : note;
+            RefreshHighlightList();
+            RefreshNoteGutter();
+            ProgressChanged?.Invoke(_book);
+        }
+
+        private void DeleteHighlight_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement { Tag: string tag } && Guid.TryParse(tag, out var id))
+            {
+                RemoveHighlightById(id);
+                return;
+            }
+
+            if (sender is FrameworkElement { Tag: Guid guid })
+                RemoveHighlightById(guid);
+        }
+
+        private void RemoveHighlightById(Guid id)
+        {
+            _book.EpubHighlights ??= new List<EpubHighlight>();
+            if (_book.EpubHighlights.RemoveAll(h => h.Id == id) <= 0)
+                return;
+
+            _expandedNoteIds.Remove(id);
+            foreach (var key in _noteClusterSelectedIds.Keys.ToList())
+            {
+                if (key.Contains(id.ToString("N"), StringComparison.Ordinal) ||
+                    _noteClusterSelectedIds[key] == id)
+                    _noteClusterSelectedIds.Remove(key);
+            }
+
+            RefreshHighlightList();
+            if (_chapterIndex >= 0 && _chapterIndex < _chapters.Count)
+                RenderChapter(_chapters[_chapterIndex]);
+            ProgressChanged?.Invoke(_book);
+        }
+
+        private void JumpToHighlight(EpubHighlight highlight)
+        {
+            if (_chapters.Count == 0)
+                return;
+
+            var index = Math.Clamp(highlight.ChapterIndex, 0, _chapters.Count - 1);
+            var plain = GetChapterPlainText(index);
+            var ratio = plain.Length <= 1
+                ? 0
+                : Math.Clamp((double)highlight.StartOffset / plain.Length, 0, 1);
+            ShowChapter(index, restoreScroll: true, scrollRatioOverride: ratio);
+        }
+
+        private void RefreshHighlightList()
+        {
+            _book.EpubHighlights ??= new List<EpubHighlight>();
+            _highlightItems.Clear();
+
+            foreach (var highlight in _book.EpubHighlights
+                         .OrderBy(h => h.ChapterIndex)
+                         .ThenBy(h => h.StartOffset)
+                         .ThenBy(h => h.CreatedUtc))
+            {
+                var source = GetChapterPlainText(highlight.ChapterIndex);
+                var text = ExtractHighlightText(source, highlight.StartOffset, highlight.EndOffset);
+                var note = NormalizeNoteText(highlight.Note);
+                var chapterTitle = highlight.ChapterIndex >= 0 && highlight.ChapterIndex < _chapters.Count
+                    ? _chapters[highlight.ChapterIndex].Title
+                    : $"Section {highlight.ChapterIndex + 1}";
+                var plainLen = Math.Max(source.Length, 1);
+                var percent = (int)Math.Round(Math.Clamp((double)highlight.StartOffset / plainLen, 0, 1) * 100);
+                _highlightItems.Add(new HighlightListItem
+                {
+                    Highlight = highlight,
+                    DisplayLabel = text,
+                    NoteText = note,
+                    DetailText = $"{chapterTitle} · {percent}%"
+                });
+            }
+
+            HighlightEmptyText.Visibility = _highlightItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            RefreshNoteGutter();
+        }
+
+        /// <summary>
+        /// Places highlight notes for the current chapter in the right gutter, aligned to the highlight.
+        /// Overlaps cascade downward with a minimum gap.
+        /// </summary>
+        private void RefreshNoteGutter()
+        {
+            if (CommentGutter == null || PageText == null || !_commentGutterExpanded)
+                return;
+
+            CommentGutter.Children.Clear();
+            _book.EpubHighlights ??= new List<EpubHighlight>();
+
+            var plainLen = Math.Max(GetChapterPlainText(_chapterIndex).Length, 1);
+            var contentHeight = Math.Max(PageText.ActualHeight, 1);
+            var gutterInnerWidth = CommentGutterHost.ActualWidth > 1
+                ? Math.Max(CommentGutterHost.ActualWidth - CommentGutterHost.Padding.Left - CommentGutterHost.Padding.Right, 180)
+                : CommentGutterWidth - 20;
+
+            var noted = _book.EpubHighlights
+                .Where(h => h.ChapterIndex == _chapterIndex && !string.IsNullOrWhiteSpace(h.Note))
+                .Select(h =>
+                {
+                    var ratio = Math.Clamp((double)h.StartOffset / plainLen, 0, 1);
+                    return (Highlight: h, IdealY: ratio * contentHeight);
+                })
+                .OrderBy(x => x.IdealY)
+                .ThenBy(x => x.Highlight.CreatedUtc)
+                .ToList();
+
+            var clusters = new List<List<(EpubHighlight Highlight, double IdealY)>>();
+            foreach (var item in noted)
+            {
+                if (clusters.Count == 0)
+                {
+                    clusters.Add(new List<(EpubHighlight, double)> { item });
+                    continue;
+                }
+
+                var current = clusters[^1];
+                var lastIdeal = current[^1].IdealY;
+                if (item.IdealY - lastIdeal <= NoteClusterProximityPx)
+                    current.Add(item);
+                else
+                    clusters.Add(new List<(EpubHighlight, double)> { item });
+            }
+
+            double nextTop = 0;
+            double maxBottom = contentHeight;
+
+            foreach (var cluster in clusters)
+            {
+                var idealY = cluster[0].IdealY;
+                var highlights = cluster.Select(c => c.Highlight).ToList();
+                var card = CreateMarginNoteCluster(highlights, gutterInnerWidth);
+                card.Measure(new Windows.Foundation.Size(gutterInnerWidth, double.PositiveInfinity));
+                var height = Math.Max(card.DesiredSize.Height, 56);
+                var top = Math.Max(idealY, nextTop);
+
+                Canvas.SetLeft(card, 0);
+                Canvas.SetTop(card, top);
+                CommentGutter.Children.Add(card);
+
+                if (Math.Abs(top - idealY) > 1)
+                {
+                    var tickColor = GetHighlightColor(highlights[0].Color, isTts: false);
+                    var tick = new Border
+                    {
+                        Width = 3,
+                        Height = 14,
+                        CornerRadius = new CornerRadius(1.5),
+                        Background = new SolidColorBrush(tickColor),
+                        IsHitTestVisible = false
+                    };
+                    Canvas.SetLeft(tick, -6);
+                    Canvas.SetTop(tick, idealY);
+                    CommentGutter.Children.Add(tick);
+                }
+
+                nextTop = top + height + CommentCardMinGap;
+                maxBottom = Math.Max(maxBottom, nextTop);
+            }
+
+            CommentGutter.Width = gutterInnerWidth;
+            CommentGutter.Height = maxBottom;
+        }
+
+        private static string GetNoteClusterKey(IReadOnlyList<EpubHighlight> highlights)
+            => string.Join("|", highlights.Select(h => h.Id.ToString("N")));
+
+        private Border CreateMarginNoteCluster(IReadOnlyList<EpubHighlight> highlights, double width)
+        {
+            if (highlights.Count == 1)
+                return CreateSingleMarginNoteCard(highlights[0], width);
+
+            var clusterKey = GetNoteClusterKey(highlights);
+            var selectedId = _noteClusterSelectedIds.TryGetValue(clusterKey, out var saved) &&
+                             highlights.Any(h => h.Id == saved)
+                ? saved
+                : highlights[0].Id;
+            _noteClusterSelectedIds[clusterKey] = selectedId;
+
+            var root = new Border
+            {
+                Width = width,
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 128, 128, 128)),
+                Background = new SolidColorBrush(Color.FromArgb(18, 128, 128, 128)),
+                Tag = clusterKey
+            };
+            root.SizeChanged += (_, e) =>
+            {
+                root.Clip = new RectangleGeometry
+                {
+                    Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height)
+                };
+            };
+
+            var layout = new Grid { RowSpacing = 0 };
+            layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var tabStrip = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 4,
+                Padding = new Thickness(6, 6, 6, 4)
+            };
+            var tabScroller = new ScrollViewer
+            {
+                Content = tabStrip,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                HorizontalScrollMode = ScrollMode.Auto,
+                VerticalScrollMode = ScrollMode.Disabled
+            };
+            Grid.SetRow(tabScroller, 0);
+
+            var selected = highlights.FirstOrDefault(h => h.Id == selectedId) ?? highlights[0];
+            selectedId = selected.Id;
+            _noteClusterSelectedIds[clusterKey] = selectedId;
+            root.BorderBrush = new SolidColorBrush(GetHighlightColor(selected.Color, isTts: false));
+
+            const double bodyPadX = 20;
+            var bodyHost = new Border
+            {
+                Padding = new Thickness(10, 4, 10, 8),
+                MinHeight = 40,
+                Child = BuildNoteBody(selected, Math.Max(width - bodyPadX, 40)),
+                ContextFlyout = BuildNoteContextMenu(selected.Id)
+            };
+            Grid.SetRow(bodyHost, 1);
+
+            for (var i = 0; i < highlights.Count; i++)
+            {
+                var highlight = highlights[i];
+                var tab = CreateNoteTab(highlight, i, isSelected: highlight.Id == selectedId);
+                tab.Tapped += (_, e) =>
+                {
+                    e.Handled = true;
+                    if (_noteClusterSelectedIds.TryGetValue(clusterKey, out var current) && current == highlight.Id)
+                        return;
+                    _noteClusterSelectedIds[clusterKey] = highlight.Id;
+                    RefreshNoteGutterPreservingScroll();
+                };
+                tabStrip.Children.Add(tab);
+            }
+
+            layout.Children.Add(tabScroller);
+            layout.Children.Add(bodyHost);
+            root.Child = layout;
+            return root;
+        }
+
+        private Border CreateSingleMarginNoteCard(EpubHighlight highlight, double width)
+        {
+            const double padX = 20;
+            var body = BuildNoteBody(highlight, Math.Max(width - padX, 40));
+            var card = new Border
+            {
+                Width = width,
+                Padding = new Thickness(10, 8, 10, 8),
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(GetHighlightColor(highlight.Color, isTts: false)),
+                Background = new SolidColorBrush(Color.FromArgb(18, 128, 128, 128)),
+                Child = body,
+                Tag = highlight.Id,
+                ContextFlyout = BuildNoteContextMenu(highlight.Id)
+            };
+            card.SizeChanged += (_, e) =>
+            {
+                card.Clip = new RectangleGeometry
+                {
+                    Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height)
+                };
+            };
+            return card;
+        }
+
+        private static bool NoteNeedsCollapse(string noteText, double contentWidth)
+        {
+            if (string.IsNullOrWhiteSpace(noteText) || contentWidth <= 1)
+                return false;
+
+            var probe = new TextBlock
+            {
+                Text = noteText,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13,
+                Width = contentWidth
+            };
+            probe.Measure(new Windows.Foundation.Size(contentWidth, double.PositiveInfinity));
+            var fullHeight = probe.DesiredSize.Height;
+
+            probe.MaxLines = NoteCollapsedMaxLines;
+            probe.TextTrimming = TextTrimming.CharacterEllipsis;
+            probe.InvalidateMeasure();
+            probe.Measure(new Windows.Foundation.Size(contentWidth, double.PositiveInfinity));
+            return fullHeight > probe.DesiredSize.Height + 0.5;
+        }
+
+        private FrameworkElement BuildNoteBody(EpubHighlight highlight, double contentWidth)
+        {
+            var noteText = NormalizeNoteText(highlight.Note);
+            var needsCollapse = NoteNeedsCollapse(noteText, contentWidth);
+            var expanded = needsCollapse && _expandedNoteIds.Contains(highlight.Id);
+            if (!needsCollapse)
+                _expandedNoteIds.Remove(highlight.Id);
+
+            // Explicit Width is required: Canvas measures with infinite width, so without it
+            // TextBlock grows sideways instead of wrapping downward.
+            var body = new TextBlock
+            {
+                Text = noteText,
+                Width = contentWidth,
+                MaxWidth = contentWidth,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13,
+                IsTextSelectionEnabled = false,
+                IsHitTestVisible = false,
+                MaxLines = needsCollapse && !expanded ? NoteCollapsedMaxLines : 0,
+                TextTrimming = needsCollapse && !expanded ? TextTrimming.CharacterEllipsis : TextTrimming.None
+            };
+
+            var stack = new StackPanel
+            {
+                Spacing = 4,
+                Width = contentWidth
+            };
+            stack.Children.Add(body);
+
+            var host = new Border
+            {
+                Width = contentWidth,
+                Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)),
+                Child = stack
+            };
+
+            if (needsCollapse)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = expanded ? "Click to collapse" : "Click to expand",
+                    FontSize = 11,
+                    Opacity = 0.65,
+                    IsHitTestVisible = false
+                });
+
+                host.Tapped += (_, e) =>
+                {
+                    e.Handled = true;
+                    if (!_expandedNoteIds.Add(highlight.Id))
+                        _expandedNoteIds.Remove(highlight.Id);
+                    RefreshNoteGutterPreservingScroll();
+                };
+            }
+
+            return host;
+        }
+
+        private void RefreshNoteGutterPreservingScroll()
+        {
+            if (PageScroller == null)
+            {
+                RefreshNoteGutter();
+                return;
+            }
+
+            var offset = PageScroller.VerticalOffset;
+            RefreshNoteGutter();
+            PageScroller.UpdateLayout();
+            PageScroller.ChangeView(null, offset, null, disableAnimation: true);
+        }
+
+        private MenuFlyout BuildNoteContextMenu(Guid highlightId)
+        {
+            var editItem = new MenuFlyoutItem { Text = "Edit note…" };
+            editItem.Click += async (_, _) => await EditHighlightNoteByIdAsync(highlightId);
+            var deleteItem = new MenuFlyoutItem { Text = "Delete highlight + note" };
+            deleteItem.Click += (_, _) => RemoveHighlightById(highlightId);
+
+            var menu = new MenuFlyout();
+            menu.Items.Add(editItem);
+            menu.Items.Add(deleteItem);
+            return menu;
+        }
+
+        private Border CreateNoteTab(EpubHighlight highlight, int index, bool isSelected)
+        {
+            var tab = new Border
+            {
+                MinWidth = 28,
+                Height = 22,
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(6, 0, 6, 0),
+                Child = new TextBlock
+                {
+                    Text = (index + 1).ToString(),
+                    FontSize = 11,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                }
+            };
+            ApplyNoteTabVisual(tab, highlight, isSelected, index);
+            return tab;
+        }
+
+        private static void ApplyNoteTabVisual(Border tab, EpubHighlight highlight, bool isSelected, int index)
+        {
+            var fill = GetHighlightColor(highlight.Color, isTts: false);
+            // Same-color tabs stay distinguishable via index label + alternating border/contrast.
+            var borderAlpha = (byte)(isSelected ? 255 : 160);
+            var outline = Color.FromArgb(
+                borderAlpha,
+                (byte)Math.Clamp(fill.R - 40 - (index % 3) * 18, 0, 255),
+                (byte)Math.Clamp(fill.G - 40 - ((index + 1) % 3) * 18, 0, 255),
+                (byte)Math.Clamp(fill.B - 40 - ((index + 2) % 3) * 18, 0, 255));
+
+            tab.Background = new SolidColorBrush(Color.FromArgb(
+                isSelected ? (byte)220 : (byte)140,
+                fill.R, fill.G, fill.B));
+            tab.BorderThickness = new Thickness(isSelected ? 2 : 1);
+            tab.BorderBrush = new SolidColorBrush(outline);
+            tab.Opacity = isSelected ? 1.0 : 0.78;
+
+            if (tab.Child is TextBlock label)
+            {
+                label.Foreground = new SolidColorBrush(
+                    IsLightHighlight(fill)
+                        ? Color.FromArgb(255, 20, 20, 20)
+                        : Color.FromArgb(255, 245, 245, 245));
+                // Pattern under number: solid vs underline style via character for same-color tabs.
+                label.Text = isSelected ? $"●{index + 1}" : $"{index + 1}";
+            }
+        }
+
+        private static bool IsLightHighlight(Color c)
+            => (c.R * 0.299 + c.G * 0.587 + c.B * 0.114) > 160;
+
+        private static string ExtractHighlightText(string source, int startOffset, int endOffset)
+        {
+            if (string.IsNullOrEmpty(source))
+                return "(highlight)";
+
+            var start = Math.Clamp(startOffset, 0, source.Length);
+            var end = Math.Clamp(endOffset, start, source.Length);
+            if (end <= start)
+                return "(highlight)";
+
+            var text = source[start..end]
+                .Replace('\n', ' ')
+                .Replace('\r', ' ');
+            text = Regex.Replace(text, @"\s+", " ").Trim();
+            if (text.Length == 0)
+                return "(highlight)";
+            if (text.Length > 160)
+                text = text[..160] + "…";
+            return text;
+        }
+
+        private void InitTtsVoices()
+        {
+            TtsVoiceCombo.Items.Clear();
+            var voices = _tts.GetVoices();
+            ComboBoxItem? selectedItem = null;
+            foreach (var voice in voices)
+            {
+                var item = new ComboBoxItem
+                {
+                    Content = $"{voice.DisplayName} ({voice.Language})",
+                    Tag = voice
+                };
+                TtsVoiceCombo.Items.Add(item);
+                if (selectedItem == null &&
+                    voice.Language.StartsWith("en", StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedItem = item;
+                }
+            }
+
+            if (selectedItem != null)
+            {
+                TtsVoiceCombo.SelectedItem = selectedItem;
+                if (selectedItem.Tag is VoiceInformation voice)
+                    _tts.SetVoice(voice);
+            }
+            else if (TtsVoiceCombo.Items.Count > 0)
+            {
+                TtsVoiceCombo.SelectedIndex = 0;
+                if (TtsVoiceCombo.SelectedItem is ComboBoxItem { Tag: VoiceInformation v })
+                    _tts.SetVoice(v);
+            }
+
+            _suppressTtsVolumeSlider = true;
+            TtsVolumeSlider.Value = Math.Clamp(_tts.Volume * 100.0, 0, 100);
+            TtsVolumeValueText.Text = $"{(int)Math.Round(TtsVolumeSlider.Value)}%";
+            _suppressTtsVolumeSlider = false;
+
+            _suppressTtsSpeedSlider = true;
+            TtsSpeedSlider.Value = Math.Clamp(_tts.SpeakingRate, 0.5, 2.0);
+            TtsSpeedValueText.Text = $"{TtsSpeedSlider.Value:0.0}×";
+            _suppressTtsSpeedSlider = false;
+
+            UpdateTtsUi();
+        }
+
+        private void TtsVoiceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (TtsVoiceCombo.SelectedItem is ComboBoxItem { Tag: VoiceInformation voice })
+                _tts.SetVoice(voice);
+        }
+
+        private void TtsVolumeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (_suppressTtsVolumeSlider || TtsVolumeSlider == null)
+                return;
+
+            _tts.Volume = e.NewValue / 100.0;
+            if (TtsVolumeValueText != null)
+                TtsVolumeValueText.Text = $"{(int)Math.Round(e.NewValue)}%";
+        }
+
+        private void TtsSpeedSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (_suppressTtsSpeedSlider || TtsSpeedSlider == null)
+                return;
+
+            _tts.SpeakingRate = e.NewValue;
+            if (TtsSpeedValueText != null)
+                TtsSpeedValueText.Text = $"{e.NewValue:0.0}×";
+        }
+
+        private async Task TtsStartOrResumeAsync()
+        {
+            if (_chapters.Count == 0)
+                return;
+
+            if (_tts.IsPlaying && _tts.IsPaused)
+            {
+                _tts.Resume();
+                UpdateTtsUi();
+                return;
+            }
+
+            if (_tts.IsPlaying)
+                return;
+
+            var startChapter = _chapterIndex;
+            var startOffset = 0;
+
+            if (!string.IsNullOrWhiteSpace(PageText.SelectedText) &&
+                TryGetSelectionOffsets(out var selStart, out _, out _))
+            {
+                startOffset = selStart;
+            }
+            else if (_book.LastEpubTtsPosition is { } saved &&
+                     saved.ChapterIndex >= 0 &&
+                     saved.ChapterIndex < _chapters.Count)
+            {
+                startChapter = saved.ChapterIndex;
+                startOffset = Math.Max(0, saved.CharOffset);
+            }
+            else
+            {
+                CaptureScrollRatioQuiet();
+                var plain = GetChapterPlainText(_chapterIndex);
+                startOffset = plain.Length <= 1
+                    ? 0
+                    : (int)Math.Clamp(_book.LastEpubScrollRatio * plain.Length, 0, plain.Length);
+            }
+
+            var chapters = _chapters
+                .Select((_, i) => (i, GetChapterPlainText(i)))
+                .ToList();
+
+            UpdateTtsUi();
+            await _tts.StartAsync(chapters, startChapter, startOffset);
+            PersistTtsPosition();
+            UpdateTtsUi();
+        }
+
+        private void TtsStopButton_Click(object sender, RoutedEventArgs e)
+        {
+            PersistTtsPosition();
+            CancelTtsSleepTimer();
+            _tts.Stop();
+            _ttsActiveStart = null;
+            _ttsActiveEnd = null;
+            ApplyHighlightsToPage();
+            UpdateTtsUi();
+        }
+
+        private void TtsSleepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressTtsSleepCombo || TtsSleepCombo == null)
+                return;
+
+            if (TtsSleepCombo.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+                !int.TryParse(tag, out var minutes))
+            {
+                return;
+            }
+
+            if (minutes <= 0)
+            {
+                CancelTtsSleepTimer();
+                UpdateTtsUi();
+                return;
+            }
+
+            _ttsSleep.StartMinutes(minutes);
+            if (!_ttsSleepUiTimer.IsEnabled)
+                _ttsSleepUiTimer.Start();
+            UpdateTtsUi();
+        }
+
+        private void OnTtsSleepTick()
+        {
+            if (!_ttsSleep.IsActive)
+            {
+                _ttsSleepUiTimer.Stop();
+                UpdateTtsUi();
+                return;
+            }
+
+            if (_ttsSleep.HasExpired())
+            {
+                PersistTtsPosition();
+                CancelTtsSleepTimer();
+                _tts.Stop();
+                _ttsActiveStart = null;
+                _ttsActiveEnd = null;
+                ApplyHighlightsToPage();
+                UpdateTtsUi();
+                return;
+            }
+
+            UpdateTtsSleepStatus();
+            if (TtsButton != null)
+                ToolTipService.SetToolTip(TtsButton, $"Listening · sleep {_ttsSleep.FormatRemaining()}");
+        }
+
+        private void CancelTtsSleepTimer()
+        {
+            _ttsSleep.Cancel();
+            _ttsSleepUiTimer.Stop();
+            _suppressTtsSleepCombo = true;
+            if (TtsSleepCombo != null)
+            {
+                foreach (var item in TtsSleepCombo.Items)
+                {
+                    if (item is ComboBoxItem { Tag: string tag } cbi && tag == "0")
+                    {
+                        TtsSleepCombo.SelectedItem = cbi;
+                        break;
+                    }
+                }
+            }
+            _suppressTtsSleepCombo = false;
+        }
+
+        private void UpdateTtsSleepStatus()
+        {
+            if (TtsSleepStatusText == null)
+                return;
+
+            TtsSleepStatusText.Text = _ttsSleep.IsActive
+                ? $"Sleep in {_ttsSleep.FormatRemaining()}"
+                : string.Empty;
+        }
+
+        private void OnTtsPositionChanged(int chapterIndex, int chunkStart, int chunkEnd)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _book.LastEpubTtsPosition = new EpubTtsPosition
+                {
+                    ChapterIndex = chapterIndex,
+                    CharOffset = chunkStart,
+                    UpdatedUtc = DateTime.UtcNow
+                };
+
+                if (chunkEnd > chunkStart)
+                {
+                    _ttsActiveStart = chunkStart;
+                    _ttsActiveEnd = chunkEnd;
+                }
+
+                if (chapterIndex != _chapterIndex)
+                {
+                    ShowChapter(chapterIndex, restoreScroll: true,
+                        scrollRatioOverride: Math.Clamp(
+                            (double)chunkStart / Math.Max(GetChapterPlainText(chapterIndex).Length, 1), 0, 1));
+                }
+                else if (_chapterIndex >= 0 && _chapterIndex < _chapters.Count)
+                {
+                    ApplyHighlightsToPage();
+                    var len = Math.Max(GetChapterPlainText(chapterIndex).Length, 1);
+                    var ratio = Math.Clamp((double)chunkStart / len, 0, 1);
+                    _ = PageScroller.ChangeView(null, ratio * PageScroller.ScrollableHeight, null, true);
+                }
+
+                UpdateTtsUi();
+            });
+        }
+
+        /// <summary>
+        /// Plain text for offsets shared by search, highlights, and TTS.
+        /// Prefers the currently rendered chapter text so selection offsets stay aligned.
+        /// </summary>
+        private string GetChapterPlainText(int chapterIndex)
+        {
+            if (chapterIndex == _chapterIndex)
+            {
+                var rendered = GetRenderedPlainText(PageText);
+                if (rendered.Length > 0)
+                    return rendered;
+            }
+
+            if (chapterIndex < 0 || chapterIndex >= _chapters.Count)
+                return string.Empty;
+
+            return _chapters[chapterIndex].PlainText ?? string.Empty;
+        }
+
+        private void PersistTtsPosition()
+        {
+            if (!_tts.IsPlaying && _book.LastEpubTtsPosition == null)
+                return;
+
+            _book.LastEpubTtsPosition = new EpubTtsPosition
+            {
+                ChapterIndex = _tts.ChapterIndex,
+                CharOffset = _tts.CharOffset,
+                UpdatedUtc = DateTime.UtcNow
+            };
+            ProgressChanged?.Invoke(_book);
+        }
+
+        private void UpdateTtsUi()
+        {
+            if (TtsButton != null)
+            {
+                TtsButton.Content = _tts.IsPlaying && !_tts.IsPaused ? "Pause" : "Listen";
+                ToolTipService.SetToolTip(
+                    TtsButton,
+                    _ttsSleep.IsActive
+                        ? $"Sleep {_ttsSleep.FormatRemaining()}"
+                        : (_tts.IsPlaying && !_tts.IsPaused ? "Pause listening" : "Play or resume listening"));
+            }
+
+            UpdateTtsSleepStatus();
+
+            if (TtsStatusText == null)
+                return;
+
+            if (_tts.IsPlaying && _tts.IsPaused)
+                TtsStatusText.Text = $"Paused · section {_tts.ChapterIndex + 1}";
+            else if (_tts.IsPlaying)
+                TtsStatusText.Text = $"Reading section {_tts.ChapterIndex + 1}…";
+            else
+                TtsStatusText.Text = _book.LastEpubTtsPosition != null
+                    ? $"Stopped · resume section {_book.LastEpubTtsPosition.ChapterIndex + 1}"
+                    : "Stopped";
+        }
+
+        /// <summary>
+        /// Google Docs and other sources often paste \r, U+2028, or U+2029 as line breaks.
+        /// Normalize to \n so TextBox/TextBlock show every line.
+        /// </summary>
+        private static string NormalizeNoteText(string? text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
+            return text
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Replace('\u2028', '\n')
+                .Replace('\u2029', '\n')
+                .Trim();
+        }
+
+        private async Task<string?> PromptNoteAsync(string title, string message, string initial)
+            => await PromptTextAsync(title, message, initial, multiline: true);
+
+        private async Task<string?> PromptTextAsync(
+            string title,
+            string message,
+            string initial,
+            bool multiline = true)
+        {
+            var normalized = NormalizeNoteText(initial);
+            // AcceptsReturn must be enabled BEFORE Text is assigned — otherwise WinUI
+            // TextBox keeps only the first line and drops everything after the first Enter.
+            var box = new TextBox
+            {
+                AcceptsReturn = multiline,
+                TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                Height = multiline ? 240 : double.NaN,
+                MinHeight = multiline ? 160 : 0,
+                PlaceholderText = message
+            };
+            if (multiline)
+            {
+                ScrollViewer.SetVerticalScrollBarVisibility(box, ScrollBarVisibility.Auto);
+                ScrollViewer.SetHorizontalScrollBarVisibility(box, ScrollBarVisibility.Disabled);
+            }
+            box.Text = normalized;
+
+            var dialog = new ContentDialog
+            {
+                Title = title,
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock { Text = message, TextWrapping = TextWrapping.WrapWholeWords },
+                        box
+                    }
+                },
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+                return null;
+
+            return multiline ? NormalizeNoteText(box.Text) : box.Text.Trim();
+        }
+
+        private async Task ShowInfoAsync(string title, string message)
+        {
+            await new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                CloseButtonText = "OK",
+                XamlRoot = XamlRoot
+            }.ShowAsync();
+        }
+
         private sealed class BookmarkListItem
         {
             public EpubBookmark Bookmark { get; set; } = new();
             public Guid Id => Bookmark.Id;
             public string DisplayLabel { get; set; } = string.Empty;
             public string DetailText { get; set; } = string.Empty;
+        }
+
+        private sealed class HighlightListItem
+        {
+            public EpubHighlight Highlight { get; set; } = new();
+            public Guid Id => Highlight.Id;
+            public string DisplayLabel { get; set; } = string.Empty;
+            public string NoteText { get; set; } = string.Empty;
+            public string DetailText { get; set; } = string.Empty;
+            public Visibility NoteVisibility =>
+                string.IsNullOrWhiteSpace(NoteText) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private sealed class SearchHit

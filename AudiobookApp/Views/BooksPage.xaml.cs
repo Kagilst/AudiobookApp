@@ -475,17 +475,26 @@ namespace AudiobookApp.Views
             };
             seriesRating.SetRating(GetSeriesAverageRating(item.Members));
 
+            ContentDialog? dialog = null;
+            var closeButton = new Button
+            {
+                Content = "Close",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                MinWidth = 120,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+            closeButton.Click += (_, _) => dialog?.Hide();
+
             var content = new StackPanel
             {
                 Spacing = 0,
-                Children = { title, seriesRating, list }
+                Children = { title, seriesRating, list, closeButton }
             };
 
-            var dialog = new ContentDialog
+            dialog = new ContentDialog
             {
                 Title = "",
                 Content = content,
-                CloseButtonText = "Close",
                 XamlRoot = XamlRoot
             };
             _activeSeriesDialog = dialog;

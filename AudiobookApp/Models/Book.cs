@@ -62,6 +62,21 @@ namespace AudiobookApp.Models
         /// </summary>
         public List<EpubBookmark> EpubBookmarks { get; set; } = new();
 
+        /// <summary>
+        /// Text highlights (with optional notes) for EPUB reading.
+        /// </summary>
+        public List<EpubHighlight> EpubHighlights { get; set; } = new();
+
+        /// <summary>
+        /// Free-standing comments pinned to an EPUB position.
+        /// </summary>
+        public List<EpubComment> EpubComments { get; set; } = new();
+
+        /// <summary>
+        /// Last text-to-speech resume point for this EPUB.
+        /// </summary>
+        public EpubTtsPosition? LastEpubTtsPosition { get; set; }
+
         public double PlaybackSpeed { get; set; } = 1.0;
 
         [JsonIgnore]
@@ -138,6 +153,59 @@ namespace AudiobookApp.Models
         public string Label { get; set; } = "";
 
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public enum EpubHighlightColor
+    {
+        Yellow,
+        Green,
+        Blue,
+        Pink
+    }
+
+    public class EpubHighlight
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public int ChapterIndex { get; set; }
+
+        /// <summary>Start index into the chapter's rendered plain text (UTF-16).</summary>
+        public int StartOffset { get; set; }
+
+        /// <summary>End index (exclusive) into the chapter's rendered plain text.</summary>
+        public int EndOffset { get; set; }
+
+        public EpubHighlightColor Color { get; set; } = EpubHighlightColor.Yellow;
+
+        /// <summary>Optional note attached to this highlight.</summary>
+        public string? Note { get; set; }
+
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public class EpubComment
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public int ChapterIndex { get; set; }
+
+        public double ScrollRatio { get; set; }
+
+        /// <summary>Optional character offset for more precise jumps.</summary>
+        public int? CharOffset { get; set; }
+
+        public string Body { get; set; } = "";
+
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public class EpubTtsPosition
+    {
+        public int ChapterIndex { get; set; }
+
+        public int CharOffset { get; set; }
+
+        public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
     }
 
     public enum ProgressFilter

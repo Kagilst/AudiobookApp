@@ -35,7 +35,7 @@
                               Content="Singular audio only"
                               Click="Filter_Click"/>
                 <ToggleButton x:Name="EpubFilterButton"
-                              Content="Epubs only"
+                              Content="Novels only"
                               Click="Filter_Click"/>
             </StackPanel>
         </Grid>

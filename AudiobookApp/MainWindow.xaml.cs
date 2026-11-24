@@ -274,9 +274,9 @@ namespace AudiobookApp
                         IsSeries = true,
                         Series = series,
                         Members = orderedVisible
-                    });
-                }
+                });
             }
+        }
 
             if (!_booksPage.SeriesOnlyFilter)
             {
@@ -375,7 +375,7 @@ namespace AudiobookApp
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!_compactMode)
-                    return;
+                return;
 
                 CompactPlayer.UpdateLayout();
                 ResizeCompactToContent();
@@ -875,7 +875,7 @@ namespace AudiobookApp
             }
             else
             {
-                var properties = await file.Properties.GetMusicPropertiesAsync();
+            var properties = await file.Properties.GetMusicPropertiesAsync();
                 title = string.IsNullOrWhiteSpace(properties.Title)
                     ? Path.GetFileNameWithoutExtension(file.Name)
                     : properties.Title;
@@ -945,9 +945,9 @@ namespace AudiobookApp
                 {
                     Title = "Unable to scan directory",
                     Content = ex.Message,
-                    CloseButtonText = "OK",
+                        CloseButtonText = "OK",
                     XamlRoot = Content.XamlRoot
-                }.ShowAsync();
+                    }.ShowAsync();
                 return;
             }
             finally
@@ -966,8 +966,8 @@ namespace AudiobookApp
                     CloseButtonText = "OK",
                     XamlRoot = Content.XamlRoot
                 }.ShowAsync();
-                return;
-            }
+                    return;
+                }
 
             // Drop exact path duplicates already in the library.
             foreach (var candidate in candidates)
@@ -1045,7 +1045,7 @@ namespace AudiobookApp
                         MaxHeight = 320
                     },
                     PrimaryButtonText = "Import anyway",
-                    CloseButtonText = "Cancel",
+                CloseButtonText = "Cancel",
                     XamlRoot = Content.XamlRoot
                 }.ShowAsync();
 
@@ -1269,7 +1269,7 @@ namespace AudiobookApp
                 if (paths.Any(IsDuplicatePath))
                 {
                     await ShowDuplicateDialogAsync();
-                    return;
+                return;
                 }
 
                 await FinishMultiFileImportAsync(paths);

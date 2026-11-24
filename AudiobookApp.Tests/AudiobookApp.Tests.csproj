@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Link pure logic + models from the app (avoids referencing the WinUI WinExe). -->
+  <ItemGroup>
+    <Compile Include="..\AudiobookApp\Services\EpubTextChunker.cs" Link="Linked\EpubTextChunker.cs" />
+    <Compile Include="..\AudiobookApp\Services\EpubTtsSleepTimer.cs" Link="Linked\EpubTtsSleepTimer.cs" />
+    <Compile Include="..\AudiobookApp\Services\EpubReaderSettings.cs" Link="Linked\EpubReaderSettings.cs" />
+    <Compile Include="..\AudiobookApp\Services\WordNetDictionaryService.cs" Link="Linked\WordNetDictionaryService.cs" />
+    <Compile Include="..\AudiobookApp\Models\Book.cs" Link="Linked\Book.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\AudiobookApp\Assets\Dictionary\wordnet-en.db" Link="Assets\Dictionary\wordnet-en.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

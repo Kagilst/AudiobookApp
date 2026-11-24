@@ -31,9 +31,7 @@ namespace AudiobookApp.Services
                 if (!File.Exists(SettingsPath))
                     return FromLocalSettingsFallback() ?? new EpubReaderSettings();
 
-                var json = File.ReadAllText(SettingsPath);
-                var loaded = JsonSerializer.Deserialize<EpubReaderSettings>(json, JsonOptions);
-                return loaded ?? new EpubReaderSettings();
+                return LoadFrom(SettingsPath) ?? new EpubReaderSettings();
             }
             catch
             {
@@ -41,15 +39,26 @@ namespace AudiobookApp.Services
             }
         }
 
-        public void Save()
+        public static EpubReaderSettings? LoadFrom(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return null;
+
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<EpubReaderSettings>(json, JsonOptions);
+        }
+
+        public void Save() => SaveTo(SettingsPath);
+
+        public void SaveTo(string path)
         {
             try
             {
-                var dir = Path.GetDirectoryName(SettingsPath);
+                var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrWhiteSpace(dir))
                     Directory.CreateDirectory(dir);
 
-                File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOptions));
+                File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
             }
             catch
             {

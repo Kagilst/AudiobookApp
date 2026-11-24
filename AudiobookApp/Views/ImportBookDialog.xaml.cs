@@ -88,9 +88,9 @@ namespace AudiobookApp.Views
 
         private void SeriesToggle_Click(object sender, RoutedEventArgs e)
         {
-            if (sender == AddToSeriesToggle && AddToSeriesToggle.IsChecked == true)
+            if (ReferenceEquals(sender, AddToSeriesToggle) && AddToSeriesToggle.IsChecked == true)
                 CreateSeriesToggle.IsChecked = false;
-            else if (sender == CreateSeriesToggle && CreateSeriesToggle.IsChecked == true)
+            else if (ReferenceEquals(sender, CreateSeriesToggle) && CreateSeriesToggle.IsChecked == true)
                 AddToSeriesToggle.IsChecked = false;
 
             UpdateSeriesPanels();

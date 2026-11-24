@@ -32,7 +32,7 @@ namespace AudiobookApp.Views
             {
                 new HelpSection(
                     "Getting around",
-                    "Use the left pane to switch library scope. Full Library shows audiobooks and EPUBs together. Audiobooks and Epubs narrow the list to one media type.\n\n" +
+                    "Use the left pane to switch library scope. Full Library shows audiobooks and novels together. Audiobooks and Novels narrow the list to one media type.\n\n" +
                     "Help and Clear library are at the bottom of the left pane. Clear library removes every book and series after you confirm.",
                     ("getting-around.png", "Left pane: library tabs above, Help and Clear library at the bottom.")),
 
@@ -76,9 +76,9 @@ namespace AudiobookApp.Views
                     "Series group related books under one library tile with stacked covers.\n\n" +
                     "• Create series… — select two or more books, confirm, reorder, then name the series.\n" +
                     "• Add to series… — place a book into an existing series.\n" +
-                    "• Click a series tile to open its members. From there you can open, rate, edit, tag, or remove a book from the series or library.\n" +
+                    "• Click a series tile to open its members. From there you can open a book, or right-click a row to rate, edit, add tags, or remove it from the series.\n" +
                     "• On a series tile: Reorder series…, Rename series, or Disband series (books stay in the library).",
-                    ("series.png", "Series members dialog with covers and Remove on each book.")),
+                    ("series.png", "Series members panel with covers, ratings, and a centered Close button.")),
 
                 new HelpSection(
                     "Ratings",
@@ -92,7 +92,7 @@ namespace AudiobookApp.Views
                     "Right-click a book (or a book row inside a series dialog) for book actions.\n\n" +
                     "• Edit — change title, author, and cover image.\n" +
                     "• Rate — set a 0–5 star rating or clear it.\n" +
-                    "• Remove — delete the book from your library (or choose remove from series when prompted).",
+                    "• Remove — in the library, deletes the book; inside an open series, removes it from that series.",
                     ("editing-books.png", "Right-click a book for Rate, Edit, Add tags, and Remove.")),
 
                 new HelpSection(
@@ -105,20 +105,33 @@ namespace AudiobookApp.Views
                 new HelpSection(
                     "Audiobook player",
                     "Open an audiobook to use the full player.\n\n" +
-                    "Controls include play/pause, seek, −10s / +10s, previous/next chapter (when chapters exist), playback speed, and volume. Progress is saved automatically as you listen.",
-                    ("audiobook-player.png", "Full audiobook player with transport controls, speed, and volume.")),
+                    "Transport controls cover play/pause, −10s / +10s, and previous/next chapter when chapters exist. Below them you can adjust volume, playback speed, sleep timer, and series autoplay (when the book is in a series).\n\n" +
+                    "Use Back to window to return to the library with the collapsed player, or Shrink to mini player for the floating mini player. Progress is saved automatically as you listen.",
+                    ("audiobook-player.png", "Full audiobook player with transport, volume, speed, sleep, and shrink controls.")),
+
+                new HelpSection(
+                    "Collapsed player",
+                    "While an audiobook session is active and you leave the full player, a collapsed player appears at the bottom of the window.\n\n" +
+                    "It offers transport, seek, volume, speed, sleep timer, and series autoplay. Full screen opens the full player. Shrink to mini player collapses the app into the floating mini player. Close pauses and hides the bar.",
+                    ("collapsed-player.png", "Collapsed player bar along the bottom of the main window.")),
 
                 new HelpSection(
                     "Mini player",
-                    "While an audiobook session is active and you leave the full player, a mini player appears at the bottom of the window.\n\n" +
-                    "It offers the main transport controls, seek, speed, and volume. Expand returns to the full player. Close pauses and hides the bar.",
-                    ("mini-player.png", "Mini player bar along the bottom of the main window.")),
+                    "The floating mini player is a small always-available window you can drag around the desktop.\n\n" +
+                    "It shows cover art, scrolling title details, transport controls, volume, speed, sleep timer, and series autoplay. Use the chapter progress bar under the text to scrub within the current chapter.\n\n" +
+                    "Full screen restores the main app. Pin locks the player in place and keeps it on top. Volume and speed pop out above the window so the sliders stay easy to use.",
+                    ("mini-player.png", "Floating mini player with transport, utilities, expand, and pin.")),
 
                 new HelpSection(
                     "EPUB reader",
                     "Open an EPUB to read in the built-in reader.\n\n" +
-                    "Move between chapters with Previous / Next, toggle Dark mode, and track reading progress. Position is saved automatically so you can resume later.",
-                    ("epub-reader.png", "EPUB reader with chapter navigation and Dark mode.")),
+                    "The left toolbar has Contents (table of contents), Bookmarks, Search, Highlight, and Listen. Previous / Next and the chapter list at the bottom move between sections. Reading position is saved automatically.\n\n" +
+                    "• Bookmarks — add a named bookmark at your current place; open Bookmarks to jump or delete.\n" +
+                    "• Settings (gear, top right) — appearance (light/dark), text size, font, line spacing, page width, and text-to-speech voice, volume, speed, sleep timer, and Stop.\n" +
+                    "• Highlights — select text, right-click, and choose a color (or Highlight + note). Notes appear in the foldable right margin — click a long note to expand it. Nearby notes share a tab strip colored by highlight; numbered tabs stay distinct even when colors match. Open Highlights to browse them (note above text, chapter and position below); right-click a list item or a margin note to edit or delete.\n" +
+                    "• Dictionary — select a word, right-click, and choose Look up… for an offline English definition (Princeton WordNet).\n" +
+                    "• Listen — play or pause continuous speech across chapters. Listening resumes where you left off. Set a sleep timer in Settings to stop after 5–60 minutes.",
+                    ("epub-reader.png", "EPUB reader with highlights, margin notes, and nearby-note tabs.")),
             };
 
         private async Task LoadImagesAsync()
