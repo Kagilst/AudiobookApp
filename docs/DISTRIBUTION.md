@@ -1,13 +1,24 @@
 # Distributing AudiobookApp
 
-Build **both** a portable folder (zip) and an MSIX installer for Windows x64.
+Build a **Setup.exe** installer (primary), a **portable zip**, and an optional **MSIX** for Windows x64.
 
 ## Requirements
 
 - Windows 10 version 1809 (build 17763) or newer
 - .NET 8 SDK with Windows App SDK workloads for building
-- Recipients of the **portable** zip need no extra runtime (self-contained)
+- [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`ISCC.exe` on `PATH`, under `%LocalAppData%\Programs\Inno Setup 6\`, or `Program Files (x86)\Inno Setup 6\`)
+- Recipients of **Setup.exe** / **portable** need no extra runtime (self-contained)
 - Recipients of the **MSIX** must allow sideloading (or trust your signing certificate)
+
+## Brand icons
+
+Source art: `AudiobookApp\Assets\Brand\book-icon-source.jpg`
+
+Regenerate package logos and `App.ico`:
+
+```powershell
+powershell -File tools\Generate-AppIcons.ps1
+```
 
 ## One-shot release build (recommended)
 
@@ -17,12 +28,25 @@ From the repo root:
 powershell -File tools\Publish-Release.ps1
 ```
 
-This runs tests, builds the portable zip with a clean folder layout, and builds the MSIX.
+This runs tests, builds the portable zip, compiles `installer\AudiobookApp.iss` into Setup.exe, and builds the MSIX.
 
 Outputs:
 
+- `dist\AudiobookApp-Setup-x64.exe` — **primary** GitHub Release asset
 - `dist\AudiobookApp-win-x64-portable.zip`
-- `dist\AudiobookApp_1.0.2.0_x64.msix`
+- `dist\AudiobookApp_1.0.3.0_x64.msix`
+
+## Setup.exe (Inno)
+
+The installer copies the self-contained app into `Program Files\AudiobookApp`, adds a **Start Menu** shortcut (so Windows Search finds **AudiobookApp**), and registers an uninstaller. An optional desktop shortcut is offered during setup.
+
+```powershell
+# After publishing App\ (see portable steps below):
+& "$env:LocalAppData\Programs\Inno Setup 6\ISCC.exe" installer\AudiobookApp.iss
+# (or Program Files (x86)\Inno Setup 6\ISCC.exe)
+```
+
+Unsigned Setup.exe may show a SmartScreen warning until you add a code-signing certificate.
 
 ## Portable layout
 
@@ -58,9 +82,9 @@ Compress-Archive -Path dist\portable\win-x64\* `
   -DestinationPath dist\AudiobookApp-win-x64-portable.zip -Force
 ```
 
-## MSIX (sideload)
+## MSIX (sideload, optional)
 
-MSIX installs through Windows and is launched from **Start**. Users do not browse a folder of DLLs day-to-day; the package payload must keep the app executable next to its dependencies for the OS installer.
+MSIX installs through Windows and is launched from **Start**. Users do not browse a folder of DLLs day-to-day; the package payload must keep the app executable next to its dependencies for the OS installer. Prefer **Setup.exe** for public GitHub downloads unless you sign the MSIX.
 
 ```powershell
 dotnet publish AudiobookApp\AudiobookApp.csproj `
@@ -75,17 +99,17 @@ dotnet publish AudiobookApp\AudiobookApp.csproj `
 
 The publish step writes something like:
 
-`dist\msix\AudiobookApp_1.0.2.0_x64_Test\AudiobookApp_1.0.2.0_x64.msix`
+`dist\msix\AudiobookApp_1.0.3.0_x64_Test\AudiobookApp_1.0.3.0_x64.msix`
 
 Copy that file to `dist\` for a flat download layout.
 
 Install notes for users:
 
 1. Settings → Privacy & security → For developers → enable **Sideload apps** (or Installer signing).
-2. Double-click the `.msix`, or: `Add-AppxPackage -Path .\AudiobookApp_1.0.2.0_x64.msix`
+2. Double-click the `.msix`, or: `Add-AppxPackage -Path .\AudiobookApp_1.0.3.0_x64.msix`
 3. For public distribution, sign with a trusted code-signing certificate and set `AppxPackageSigningEnabled=true` with your PFX.
 
-Bump `<Identity Version="..."/>` in `AudiobookApp\Package.appxmanifest` for each release (and the `$Version` in `tools\Publish-Release.ps1`).
+Bump `<Identity Version="..."/>` in `AudiobookApp\Package.appxmanifest`, `$Version` in `tools\Publish-Release.ps1`, and `#define MyAppVersion` in `installer\AudiobookApp.iss` for each release.
 
 ## Verify before shipping
 

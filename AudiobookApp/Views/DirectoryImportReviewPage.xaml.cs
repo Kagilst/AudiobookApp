@@ -21,7 +21,7 @@ namespace AudiobookApp.Views
     {
         private readonly ObservableCollection<CandidateRow> _allRows = new();
         private readonly ObservableCollection<CandidateRow> _visibleRows = new();
-        private enum ReviewFilter { All, MergedOnly, SingularOnly, EpubOnly }
+        private enum ReviewFilter { All, MergedOnly, SingularOnly, EpubOnly, ComicsOnly }
         private ReviewFilter _filter = ReviewFilter.All;
 
         public event Action<IReadOnlyList<ImportBookCandidate>, IReadOnlyList<ImportBookCandidate>>? ImportConfirmed;
@@ -92,6 +92,7 @@ namespace AudiobookApp.Views
             return _filter switch
             {
                 ReviewFilter.EpubOnly => row.Candidate.MediaType == BookMediaType.Epub,
+                ReviewFilter.ComicsOnly => row.Candidate.MediaType == BookMediaType.Comic,
                 ReviewFilter.MergedOnly =>
                     row.Candidate.MediaType == BookMediaType.Audiobook &&
                     row.Candidate.FilePaths.Count > 1,
@@ -113,6 +114,7 @@ namespace AudiobookApp.Views
                 {
                     SingularFilterButton.IsChecked = false;
                     EpubFilterButton.IsChecked = false;
+                    ComicsFilterButton.IsChecked = false;
                     _filter = ReviewFilter.MergedOnly;
                 }
                 else
@@ -126,6 +128,7 @@ namespace AudiobookApp.Views
                 {
                     MergedFilterButton.IsChecked = false;
                     EpubFilterButton.IsChecked = false;
+                    ComicsFilterButton.IsChecked = false;
                     _filter = ReviewFilter.SingularOnly;
                 }
                 else
@@ -139,7 +142,22 @@ namespace AudiobookApp.Views
                 {
                     MergedFilterButton.IsChecked = false;
                     SingularFilterButton.IsChecked = false;
+                    ComicsFilterButton.IsChecked = false;
                     _filter = ReviewFilter.EpubOnly;
+                }
+                else
+                {
+                    _filter = ReviewFilter.All;
+                }
+            }
+            else if (clicked == ComicsFilterButton)
+            {
+                if (ComicsFilterButton.IsChecked == true)
+                {
+                    MergedFilterButton.IsChecked = false;
+                    SingularFilterButton.IsChecked = false;
+                    EpubFilterButton.IsChecked = false;
+                    _filter = ReviewFilter.ComicsOnly;
                 }
                 else
                 {
@@ -228,13 +246,13 @@ namespace AudiobookApp.Views
             if (selected.Count < 2)
                 return;
 
-            if (selected.Any(r => r.Candidate.MediaType == BookMediaType.Epub) &&
-                selected.Any(r => r.Candidate.MediaType == BookMediaType.Audiobook))
+            var mediaKinds = selected.Select(r => r.Candidate.MediaType).Distinct().ToList();
+            if (mediaKinds.Count > 1)
             {
                 _ = new ContentDialog
                 {
                     Title = "Cannot merge",
-                    Content = "Epubs and audiobooks cannot be merged into one book.",
+                    Content = "Different media types (audiobooks, novels, comics) cannot be merged into one book.",
                     CloseButtonText = "OK",
                     XamlRoot = XamlRoot
                 }.ShowAsync();

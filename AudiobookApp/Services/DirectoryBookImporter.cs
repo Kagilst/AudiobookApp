@@ -20,6 +20,11 @@ namespace AudiobookApp.Services
             ".epub"
         };
 
+        private static readonly HashSet<string> ComicExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".cbz"
+        };
+
         private static readonly Regex TrailingPartRegex = new(
             @"[\s._\-]*(?:cd|disc|disk|part|chapter|ch|track|pt)?[\s._\-]*\(?\d{1,3}\)?$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -52,6 +57,7 @@ namespace AudiobookApp.Services
             List<string> files)
         {
             var epubs = files.Where(f => EpubExtensions.Contains(Path.GetExtension(f))).ToList();
+            var comics = files.Where(f => ComicExtensions.Contains(Path.GetExtension(f))).ToList();
             var audio = files.Where(f => AudioExtensions.Contains(Path.GetExtension(f))).ToList();
 
             foreach (var epub in epubs.OrderBy(f => Path.GetFileName(f), Comparer<string>.Create(CompareNatural)))
@@ -62,6 +68,18 @@ namespace AudiobookApp.Services
                     Author = "Unknown Author",
                     MediaType = BookMediaType.Epub,
                     FilePaths = new List<string> { epub },
+                    Reason = ImportGroupReason.SingleFile
+                };
+            }
+
+            foreach (var comic in comics.OrderBy(f => Path.GetFileName(f), Comparer<string>.Create(CompareNatural)))
+            {
+                yield return new ImportBookCandidate
+                {
+                    Title = Path.GetFileNameWithoutExtension(comic),
+                    Author = "Unknown Author",
+                    MediaType = BookMediaType.Comic,
+                    FilePaths = new List<string> { comic },
                     Reason = ImportGroupReason.SingleFile
                 };
             }
@@ -280,7 +298,9 @@ namespace AudiobookApp.Services
         private static bool IsMediaFile(string path)
         {
             var ext = Path.GetExtension(path);
-            return AudioExtensions.Contains(ext) || EpubExtensions.Contains(ext);
+            return AudioExtensions.Contains(ext)
+                   || EpubExtensions.Contains(ext)
+                   || ComicExtensions.Contains(ext);
         }
 
         public static int CompareNatural(string? a, string? b)

@@ -24,7 +24,8 @@ namespace AudiobookApp
         {
             FullLibrary,
             Audiobooks,
-            Epubs
+            Epubs,
+            Comics
         }
 
         public MainViewModel VM { get; } = new();
@@ -131,6 +132,8 @@ namespace AudiobookApp
 
         private void Epubs_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Epubs);
 
+        private void Comics_Click(object sender, RoutedEventArgs e) => ShowTab(LibraryTab.Comics);
+
         private void Help_Click(object sender, RoutedEventArgs e)
         {
             _showingFullPlayer = false;
@@ -176,6 +179,7 @@ namespace AudiobookApp
             SetSidebarButtonState(FullLibraryButton, _currentTab == LibraryTab.FullLibrary);
             SetSidebarButtonState(AudiobooksButton, _currentTab == LibraryTab.Audiobooks);
             SetSidebarButtonState(EpubsButton, _currentTab == LibraryTab.Epubs);
+            SetSidebarButtonState(ComicsButton, _currentTab == LibraryTab.Comics);
         }
 
         private static void SetSidebarButtonState(Button button, bool selected)
@@ -194,6 +198,7 @@ namespace AudiobookApp
             {
                 LibraryTab.Audiobooks => b.MediaType == BookMediaType.Audiobook,
                 LibraryTab.Epubs => b.MediaType == BookMediaType.Epub,
+                LibraryTab.Comics => b.MediaType == BookMediaType.Comic,
                 _ => true
             };
 
@@ -580,6 +585,24 @@ namespace AudiobookApp
             var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = AppWindow.GetFromWindowId(windowId);
             _presenter = _appWindow.Presenter as OverlappedPresenter;
+            TrySetWindowIcon();
+        }
+
+        private void TrySetWindowIcon()
+        {
+            if (_appWindow == null)
+                return;
+
+            try
+            {
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "App.ico");
+                if (File.Exists(iconPath))
+                    _appWindow.SetIcon(iconPath);
+            }
+            catch
+            {
+                // Unpackaged builds still get the EXE icon; ignore missing asset.
+            }
         }
 
         private IEnumerable<string> GetAllTags()
@@ -848,6 +871,7 @@ namespace AudiobookApp
             picker.FileTypeFilter.Add(".m4b");
             picker.FileTypeFilter.Add(".mp4");
             picker.FileTypeFilter.Add(".epub");
+            picker.FileTypeFilter.Add(".cbz");
 
             var hwnd = WindowNative.GetWindowHandle(this);
             InitializeWithWindow.Initialize(picker, hwnd);
@@ -862,20 +886,18 @@ namespace AudiobookApp
                 return;
             }
 
-            var extension = Path.GetExtension(file.Path);
-            var isEpub = extension.Equals(".epub", StringComparison.OrdinalIgnoreCase);
-
+            var mediaType = MediaTypeHelper.FromExtension(file.Path) ?? BookMediaType.Audiobook;
             string title;
             string author;
 
-            if (isEpub)
+            if (mediaType is BookMediaType.Epub or BookMediaType.Comic)
             {
                 title = Path.GetFileNameWithoutExtension(file.Name);
                 author = "Unknown Author";
             }
             else
             {
-            var properties = await file.Properties.GetMusicPropertiesAsync();
+                var properties = await file.Properties.GetMusicPropertiesAsync();
                 title = string.IsNullOrWhiteSpace(properties.Title)
                     ? Path.GetFileNameWithoutExtension(file.Name)
                     : properties.Title;
@@ -891,7 +913,7 @@ namespace AudiobookApp
                 Author = author,
                 FilePath = file.Path,
                 FilePaths = new List<string> { file.Path },
-                MediaType = isEpub ? BookMediaType.Epub : BookMediaType.Audiobook
+                MediaType = mediaType
             };
 
             await ShowImportDialogAsync(book);
@@ -1477,10 +1499,11 @@ namespace AudiobookApp
                 if (book.FilePaths.Count != beforeNormalize && beforeNormalize == 0)
                     changed = true;
 
-                if (book.MediaType == default &&
-                    Path.GetExtension(book.FilePath).Equals(".epub", StringComparison.OrdinalIgnoreCase))
+                if (book.MediaType == default)
                 {
-                    book.MediaType = BookMediaType.Epub;
+                    var inferred = MediaTypeHelper.FromExtension(book.FilePath);
+                    if (inferred.HasValue)
+                        book.MediaType = inferred.Value;
                 }
 
                 VM.Books.Add(book);
@@ -1526,6 +1549,12 @@ namespace AudiobookApp
                 return;
             }
 
+            if (book.MediaType == BookMediaType.Comic)
+            {
+                ShowComicReader(book);
+                return;
+            }
+
             try
             {
                 var isSameBook = _playback.CurrentBook != null &&
@@ -1565,6 +1594,30 @@ namespace AudiobookApp
                 _ = new ContentDialog
                 {
                     Title = "Unable to open EPUB",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                }.ShowAsync();
+            }
+        }
+
+        private void ShowComicReader(Book book)
+        {
+            try
+            {
+                _showingFullPlayer = true;
+                var reader = new ComicReaderPage(book);
+                reader.ProgressChanged += _ => SaveBooks();
+                ContentFrame.Content = reader;
+                UpdateMiniPlayerVisibility();
+            }
+            catch (Exception ex)
+            {
+                _showingFullPlayer = false;
+                UpdateMiniPlayerVisibility();
+                _ = new ContentDialog
+                {
+                    Title = "Unable to open comic",
                     Content = ex.Message,
                     CloseButtonText = "OK",
                     XamlRoot = Content.XamlRoot

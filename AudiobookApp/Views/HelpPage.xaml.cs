@@ -32,16 +32,16 @@ namespace AudiobookApp.Views
             {
                 new HelpSection(
                     "Getting around",
-                    "Use the left pane to switch library scope. Full Library shows audiobooks and novels together. Audiobooks and Novels narrow the list to one media type.\n\n" +
+                    "Use the left pane to switch library scope. Full Library shows audiobooks, novels, and comics together. Audiobooks, Novels, and Comics each narrow the list to one media type.\n\n" +
                     "Help and Clear library are at the bottom of the left pane. Clear library removes every book and series after you confirm.",
                     ("getting-around.png", "Left pane: library tabs above, Help and Clear library at the bottom.")),
 
                 new HelpSection(
                     "Importing books",
                     "Click Import Book on the library toolbar, then choose how to bring files in.\n\n" +
-                    "• Single file — pick one .mp3, .m4b, .mp4, or .epub, then set title, author, optional cover, tags, and optional series.\n" +
+                    "• Single file — pick one .mp3, .m4b, .mp4, .epub, or .cbz, then set title, author, optional cover, tags, and optional series.\n" +
                     "• Multiple audio files — pick several audio parts, arrange their order, then finish the same import details.\n" +
-                    "• Entire directory — scans a folder, opens a review page where you can edit titles, merge or split groups, filter by type, and import the selection.",
+                    "• Entire directory — scans a folder, opens a review page where you can edit titles, merge or split groups, filter by type (including Comics only), and import the selection.",
                     ("importing-books.png", "Import Book opens a dialog with Single file, Multiple audio files, and Entire directory.")),
 
                 new HelpSection(
@@ -124,7 +124,7 @@ namespace AudiobookApp.Views
 
                 new HelpSection(
                     "EPUB reader",
-                    "Open an EPUB to read in the built-in reader.\n\n" +
+                    "Open an EPUB (Novels) to read in the built-in reader. Images that ship inside the EPUB are shown inline with the text.\n\n" +
                     "The left toolbar has Contents (table of contents), Bookmarks, Search, Highlight, and Listen. Previous / Next and the chapter list at the bottom move between sections. Reading position is saved automatically.\n\n" +
                     "• Bookmarks — add a named bookmark at your current place; open Bookmarks to jump or delete.\n" +
                     "• Settings (gear, top right) — appearance (light/dark), text size, font, line spacing, page width, and text-to-speech voice, volume, speed, sleep timer, and Stop.\n" +
@@ -132,6 +132,13 @@ namespace AudiobookApp.Views
                     "• Dictionary — select a word, right-click, and choose Look up… for an offline English definition (Princeton WordNet).\n" +
                     "• Listen — play or pause continuous speech across chapters. Listening resumes where you left off. Set a sleep timer in Settings to stop after 5–60 minutes.",
                     ("epub-reader.png", "EPUB reader with highlights, margin notes, and nearby-note tabs.")),
+
+                new HelpSection(
+                    "Comics reader",
+                    "Import .cbz comics and open them from the Comics library tab.\n\n" +
+                    "Use the settings gear to choose reading mode (left to right, right to left, or top to bottom), page width (thin, normal, wide), and zoom.\n" +
+                    "In top-to-bottom mode pages stack with no gap for continuous scrolling.\n\n" +
+                    "Page position and reading mode are saved per comic; width and zoom are shared."),
             };
 
         private async Task LoadImagesAsync()

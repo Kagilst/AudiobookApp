@@ -57,11 +57,13 @@ namespace AudiobookApp.Views
                 FileCountText.Visibility = Visibility.Visible;
             }
 
-            HeaderText.Text = book.MediaType == BookMediaType.Epub
-                ? "Import Epub"
-                : book.IsMultiFileAudiobook
-                    ? "Import Multi-file Audiobook"
-                    : "Import Audiobook";
+            HeaderText.Text = book.MediaType switch
+            {
+                BookMediaType.Epub => "Import Epub",
+                BookMediaType.Comic => "Import Comic",
+                _ when book.IsMultiFileAudiobook => "Import Multi-file Audiobook",
+                _ => "Import Audiobook"
+            };
 
             var suggestions = DefaultSuggestedTags
                 .Concat(existingTags)

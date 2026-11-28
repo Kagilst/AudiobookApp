@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -15,9 +17,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using VersOne.Epub;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.System;
 using Windows.UI;
 using Windows.UI.Text;
@@ -50,6 +54,7 @@ namespace AudiobookApp.Views
         private readonly EpubTtsService _tts = new();
         private readonly EpubTtsSleepTimer _ttsSleep = new();
         private readonly WordNetDictionaryService _dictionary = new();
+        private readonly Dictionary<string, byte[]> _epubImages = new(StringComparer.OrdinalIgnoreCase);
         private readonly DispatcherTimer _ttsSleepUiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
         private int _chapterIndex;
         private int _searchHitIndex = -1;
@@ -117,6 +122,7 @@ namespace AudiobookApp.Views
                 _tts.Stop();
                 _tts.Dispose();
                 _dictionary.Dispose();
+                _epubImages.Clear();
                 PersistProgress();
                 SaveReadingPreferences();
             };
@@ -456,6 +462,7 @@ namespace AudiobookApp.Views
                 var epub = await EpubReader.ReadBookAsync(_book.FilePath);
                 _chapters.Clear();
                 _tocEntries.Clear();
+                LoadEpubImageMap(epub);
 
                 if (!string.IsNullOrWhiteSpace(epub.Title))
                     BookTitleText.Text = epub.Title;
@@ -467,7 +474,8 @@ namespace AudiobookApp.Views
                         continue;
 
                     var plain = HtmlToPlainText(html);
-                    if (string.IsNullOrWhiteSpace(plain))
+                    var hasImages = Regex.IsMatch(html, @"<img\b", RegexOptions.IgnoreCase);
+                    if (string.IsNullOrWhiteSpace(plain) && !hasImages)
                         continue;
 
                     var fileKey = file.Key ?? file.FilePath ?? string.Empty;
@@ -707,7 +715,7 @@ namespace AudiobookApp.Views
         {
             PageText.Blocks.Clear();
 
-            var blocks = BuildRichBlocks(chapter.Html, _fontSize);
+            var blocks = BuildRichBlocks(chapter, _fontSize);
             if (blocks.Count == 0)
             {
                 foreach (var chunk in SplitPlainParagraphs(chapter.PlainText))
@@ -721,6 +729,40 @@ namespace AudiobookApp.Views
 
             ApplyHighlightsToPage();
             DispatcherQueue.TryEnqueue(RefreshNoteGutter);
+        }
+
+        private void LoadEpubImageMap(EpubBook epub)
+        {
+            _epubImages.Clear();
+            try
+            {
+                foreach (var imageFile in epub.Content.Images.Local)
+                    IndexEpubImage(imageFile.FilePath, imageFile.Key, imageFile.Content);
+            }
+            catch
+            {
+                // Older/odd packages — ignore image map failures.
+            }
+        }
+
+        private void IndexEpubImage(string? filePath, string? key, byte[]? content)
+        {
+            if (content is not { Length: > 0 })
+                return;
+
+            void Add(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    return;
+                var normalized = NormalizePath(raw);
+                _epubImages[normalized] = content;
+                var fileName = Path.GetFileName(normalized);
+                if (!string.IsNullOrWhiteSpace(fileName))
+                    _epubImages.TryAdd(fileName, content);
+            }
+
+            Add(filePath);
+            Add(key);
         }
 
         private void PageText_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -992,9 +1034,10 @@ namespace AudiobookApp.Views
             return paragraph;
         }
 
-        private static List<Block> BuildRichBlocks(string html, double baseFontSize)
+        private List<Block> BuildRichBlocks(EpubChapterContent chapter, double baseFontSize)
         {
             var blocks = new List<Block>();
+            var html = chapter.Html;
             if (string.IsNullOrWhiteSpace(html))
                 return blocks;
 
@@ -1002,7 +1045,7 @@ namespace AudiobookApp.Views
             if (string.IsNullOrWhiteSpace(body))
                 return blocks;
 
-            var state = new HtmlRenderState(baseFontSize);
+            var state = new HtmlRenderState(baseFontSize, chapter.FilePath);
             var tokens = Regex.Matches(body, @"</?[a-zA-Z][^>]*>|[^<]+");
 
             foreach (Match token in tokens)
@@ -1026,7 +1069,7 @@ namespace AudiobookApp.Views
             if (string.IsNullOrWhiteSpace(html))
                 return string.Empty;
 
-            // Drop unsafe / non-text containers entirely.
+            // Drop unsafe / non-text containers entirely. Keep <img> for rendering.
             html = Regex.Replace(
                 html,
                 @"<(script|style|svg|iframe|object|embed|form|noscript)(\s[^>]*)?>[\s\S]*?</\1\s*>",
@@ -1035,13 +1078,13 @@ namespace AudiobookApp.Views
             html = Regex.Replace(html, @"<!--[\s\S]*?-->", " ");
             html = Regex.Replace(
                 html,
-                @"<(script|style|svg|iframe|object|embed|form|noscript|img|hr|meta|link)(\s[^>]*)?/?>",
+                @"<(script|style|svg|iframe|object|embed|form|noscript|hr|meta|link)(\s[^>]*)?/?>",
                 " ",
                 RegexOptions.IgnoreCase);
             return html;
         }
 
-        private static void HandleHtmlTag(string rawTag, HtmlRenderState state, List<Block> blocks)
+        private void HandleHtmlTag(string rawTag, HtmlRenderState state, List<Block> blocks)
         {
             var match = Regex.Match(rawTag, @"^</?\s*([a-zA-Z0-9]+)");
             if (!match.Success)
@@ -1050,12 +1093,18 @@ namespace AudiobookApp.Views
             var name = match.Groups[1].Value.ToLowerInvariant();
             var isClose = rawTag.StartsWith("</", StringComparison.Ordinal);
             var selfClosing = rawTag.EndsWith("/>", StringComparison.Ordinal)
-                              || name is "br" or "wbr";
+                              || name is "br" or "wbr" or "img";
 
             if (name is "br" or "wbr")
             {
                 EnsureParagraph(state, BlockKind.Paragraph);
                 state.Current!.Inlines.Add(new LineBreak());
+                return;
+            }
+
+            if (name == "img")
+            {
+                TryAppendImage(rawTag, state);
                 return;
             }
 
@@ -1260,6 +1309,112 @@ namespace AudiobookApp.Views
             return run;
         }
 
+        private void TryAppendImage(string rawTag, HtmlRenderState state)
+        {
+            var srcMatch = Regex.Match(rawTag, @"\bsrc\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+            if (!srcMatch.Success)
+                return;
+
+            var src = WebUtility.HtmlDecode(srcMatch.Groups[1].Value.Trim());
+            if (string.IsNullOrWhiteSpace(src)
+                || src.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || src.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                || src.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!TryResolveEpubImageBytes(state.ChapterFilePath, src, out var bytes) || bytes.Length == 0)
+                return;
+
+            var bitmap = TryCreateBitmap(bytes);
+            if (bitmap == null)
+                return;
+
+            EnsureParagraph(state, state.Current is null ? BlockKind.Paragraph : state.Kind);
+            var maxWidth = Math.Max(GetContentMaxWidth(_contentWidthKey) - 16, 200);
+            var image = new Image
+            {
+                Source = bitmap,
+                Stretch = Stretch.Uniform,
+                MaxWidth = maxWidth,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 8, 0, 8)
+            };
+            state.Current!.Inlines.Add(new InlineUIContainer { Child = image });
+            state.HasVisibleText = true;
+        }
+
+        private bool TryResolveEpubImageBytes(string chapterFilePath, string src, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            var resolved = ResolveEpubHref(chapterFilePath, src);
+            if (_epubImages.TryGetValue(resolved, out bytes!))
+                return true;
+
+            var fileName = Path.GetFileName(resolved);
+            if (!string.IsNullOrWhiteSpace(fileName) && _epubImages.TryGetValue(fileName, out bytes!))
+                return true;
+
+            // Try without leading folders (some packages use absolute-looking paths).
+            foreach (var key in _epubImages.Keys)
+            {
+                if (key.EndsWith("/" + fileName, StringComparison.OrdinalIgnoreCase)
+                    || key.Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    bytes = _epubImages[key];
+                    return true;
+                }
+            }
+
+            bytes = Array.Empty<byte>();
+            return false;
+        }
+
+        private static string ResolveEpubHref(string baseFilePath, string href)
+        {
+            var cut = href.IndexOfAny(new[] { '#', '?' });
+            if (cut >= 0)
+                href = href[..cut];
+            href = href.Replace('\\', '/').Trim();
+            if (href.StartsWith('/'))
+                return NormalizePath(href);
+
+            var baseDir = NormalizePath(Path.GetDirectoryName(baseFilePath.Replace('\\', '/')) ?? "");
+            var combined = string.IsNullOrEmpty(baseDir) ? href : $"{baseDir}/{href}";
+            var parts = new List<string>();
+            foreach (var segment in combined.Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (segment == ".")
+                    continue;
+                if (segment == "..")
+                {
+                    if (parts.Count > 0)
+                        parts.RemoveAt(parts.Count - 1);
+                    continue;
+                }
+
+                parts.Add(segment);
+            }
+
+            return string.Join('/', parts);
+        }
+
+        private static BitmapImage? TryCreateBitmap(byte[] bytes)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                using var stream = new InMemoryRandomAccessStream();
+                stream.WriteAsync(bytes.AsBuffer()).AsTask().GetAwaiter().GetResult();
+                stream.Seek(0);
+                bitmap.SetSource(stream);
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static void FlushParagraph(HtmlRenderState state, List<Block> blocks)
         {
             if (state.Current is null)
@@ -1314,12 +1469,14 @@ namespace AudiobookApp.Views
 
         private sealed class HtmlRenderState
         {
-            public HtmlRenderState(double baseFontSize)
+            public HtmlRenderState(double baseFontSize, string chapterFilePath)
             {
                 BaseFontSize = baseFontSize;
+                ChapterFilePath = chapterFilePath ?? string.Empty;
             }
 
             public double BaseFontSize { get; }
+            public string ChapterFilePath { get; }
             public Paragraph? Current { get; set; }
             public BlockKind Kind { get; set; } = BlockKind.Paragraph;
             public bool HasVisibleText { get; set; }

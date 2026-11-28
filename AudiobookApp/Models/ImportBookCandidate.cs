@@ -43,6 +43,8 @@ namespace AudiobookApp.Models
                 var count = FilePaths.Count;
                 if (MediaType == BookMediaType.Epub)
                     return count == 1 ? "1 epub" : $"{count} epubs";
+                if (MediaType == BookMediaType.Comic)
+                    return count == 1 ? "1 comic (cbz)" : $"{count} comics";
 
                 return count == 1 ? "1 audio file" : $"{count} audio files";
             }

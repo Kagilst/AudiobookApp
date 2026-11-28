@@ -1,16 +1,34 @@
-﻿# Builds portable (clean root launcher + App\) and MSIX sideload packages.
+﻿# Builds portable zip, Setup.exe (Inno), and MSIX sideload packages.
 # Usage (from repo root):  powershell -File tools\Publish-Release.ps1
+# Requires: .NET 8 SDK, Inno Setup 6 (ISCC.exe)
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 
-$Version = "1.0.2.0"
+$Version = "1.0.3.0"
 $PortableRoot = Join-Path $RepoRoot "dist\portable\win-x64"
 $PortableApp = Join-Path $PortableRoot "App"
 $PortableZip = Join-Path $RepoRoot "dist\AudiobookApp-win-x64-portable.zip"
+$SetupExe = Join-Path $RepoRoot "dist\AudiobookApp-Setup-x64.exe"
 $MsixFlat = Join-Path $RepoRoot "dist\AudiobookApp_${Version}_x64.msix"
 $DictDb = Join-Path $RepoRoot "AudiobookApp\Assets\Dictionary\wordnet-en.db"
+$IssPath = Join-Path $RepoRoot "installer\AudiobookApp.iss"
+
+function Resolve-Iscc {
+    $cmd = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $candidates = @(
+        "${env:LocalAppData}\Programs\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path $path) { return $path }
+    }
+    return $null
+}
 
 Write-Host "== Verify dictionary pack ==" -ForegroundColor Cyan
 if (-not (Test-Path $DictDb)) {
@@ -42,6 +60,9 @@ if (-not (Test-Path (Join-Path $PortableApp "AudiobookApp.exe"))) {
 if (-not (Test-Path (Join-Path $PortableApp "Assets\Dictionary\wordnet-en.db"))) {
     throw "Dictionary missing from portable App folder"
 }
+if (-not (Test-Path (Join-Path $PortableApp "Assets\App.ico"))) {
+    throw "App.ico missing from portable App folder — run tools\Generate-AppIcons.ps1"
+}
 
 Write-Host "== Portable: publish root launcher (Native AOT) ==" -ForegroundColor Cyan
 $launcherOut = Join-Path $RepoRoot "dist\launcher-build"
@@ -58,7 +79,6 @@ dotnet publish (Join-Path $RepoRoot "AudiobookApp.Launcher\AudiobookApp.Launcher
 if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed." }
 
 Copy-Item (Join-Path $launcherOut "AudiobookApp.exe") (Join-Path $PortableRoot "AudiobookApp.exe") -Force
-# Optional: keep a short readme beside the launcher
 @"
 AudiobookApp portable
 
@@ -71,6 +91,17 @@ Library data: %LocalAppData%\AudiobookApp\
 Write-Host "== Zip portable ==" -ForegroundColor Cyan
 if (Test-Path $PortableZip) { Remove-Item $PortableZip -Force }
 Compress-Archive -Path (Join-Path $PortableRoot "*") -DestinationPath $PortableZip -Force
+
+Write-Host "== Setup.exe (Inno Setup) ==" -ForegroundColor Cyan
+$iscc = Resolve-Iscc
+if (-not $iscc) {
+    throw "ISCC.exe not found. Install Inno Setup 6 (https://jrsoftware.org/isinfo.php) and retry."
+}
+if (-not (Test-Path $IssPath)) { throw "Missing $IssPath" }
+if (Test-Path $SetupExe) { Remove-Item $SetupExe -Force }
+& $iscc $IssPath
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed." }
+if (-not (Test-Path $SetupExe)) { throw "Setup.exe not produced at $SetupExe" }
 
 Write-Host "== MSIX ==" -ForegroundColor Cyan
 dotnet publish (Join-Path $RepoRoot "AudiobookApp\AudiobookApp.csproj") `
@@ -95,7 +126,7 @@ Copy-Item $msixSrc $MsixFlat -Force
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
+Write-Host "  Setup:    $SetupExe  (primary GitHub download)"
 Write-Host "  Portable: $PortableZip"
 Write-Host "            (root has AudiobookApp.exe + App\ + README.txt)"
-Write-Host "  MSIX:     $MsixFlat"
-Write-Host "  Note: MSIX installs to Start Menu; package internals stay flat for the OS installer."
+Write-Host "  MSIX:     $MsixFlat  (sideload; optional)"

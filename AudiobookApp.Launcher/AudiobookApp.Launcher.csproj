@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>AudiobookApp</AssemblyName>
     <RootNamespace>AudiobookApp.Launcher</RootNamespace>
+    <ApplicationIcon>..\AudiobookApp\Assets\App.ico</ApplicationIcon>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
     <StripSymbols>true</StripSymbols>

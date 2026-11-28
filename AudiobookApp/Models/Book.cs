@@ -8,7 +8,15 @@ namespace AudiobookApp.Models
     public enum BookMediaType
     {
         Audiobook,
-        Epub
+        Epub,
+        Comic
+    }
+
+    public enum ComicReadingMode
+    {
+        LeftToRight,
+        RightToLeft,
+        VerticalStrip
     }
 
     public class Book
@@ -76,6 +84,16 @@ namespace AudiobookApp.Models
         /// Last text-to-speech resume point for this EPUB.
         /// </summary>
         public EpubTtsPosition? LastEpubTtsPosition { get; set; }
+
+        /// <summary>
+        /// Last CBZ comic page index (0-based).
+        /// </summary>
+        public int LastComicPageIndex { get; set; }
+
+        /// <summary>
+        /// Comic page reading direction / layout.
+        /// </summary>
+        public ComicReadingMode ComicReadingMode { get; set; } = ComicReadingMode.LeftToRight;
 
         public double PlaybackSpeed { get; set; } = 1.0;
 

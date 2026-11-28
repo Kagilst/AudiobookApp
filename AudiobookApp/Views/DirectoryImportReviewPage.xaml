@@ -37,6 +37,9 @@
                 <ToggleButton x:Name="EpubFilterButton"
                               Content="Novels only"
                               Click="Filter_Click"/>
+                <ToggleButton x:Name="ComicsFilterButton"
+                              Content="Comics only"
+                              Click="Filter_Click"/>
             </StackPanel>
         </Grid>
 

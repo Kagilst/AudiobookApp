@@ -28,6 +28,8 @@
     <Compile Include="..\AudiobookApp\Services\EpubTtsSleepTimer.cs" Link="Linked\EpubTtsSleepTimer.cs" />
     <Compile Include="..\AudiobookApp\Services\EpubReaderSettings.cs" Link="Linked\EpubReaderSettings.cs" />
     <Compile Include="..\AudiobookApp\Services\WordNetDictionaryService.cs" Link="Linked\WordNetDictionaryService.cs" />
+    <Compile Include="..\AudiobookApp\Services\MediaTypeHelper.cs" Link="Linked\MediaTypeHelper.cs" />
+    <Compile Include="..\AudiobookApp\Services\CbzComicService.cs" Link="Linked\CbzComicService.cs" />
     <Compile Include="..\AudiobookApp\Models\Book.cs" Link="Linked\Book.cs" />
   </ItemGroup>
 

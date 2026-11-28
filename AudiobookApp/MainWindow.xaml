@@ -53,6 +53,17 @@
                                 <TextBlock Text="Novels"/>
                             </StackPanel>
                         </Button>
+
+                        <Button x:Name="ComicsButton"
+                                Click="Comics_Click"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE7C3;" FontSize="16"/>
+                                <TextBlock Text="Comics"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </NavigationView.PaneCustomContent>
 
